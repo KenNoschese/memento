@@ -1,6 +1,6 @@
 # Memento:
 
-**Memento** transforms your passive browser history into an active, searchable knowledge base. Built for the **Dev3pack Global Hackathon (May 2026)**, it uses AI to index what you've read, watched, and thought—allowing you to search your digital life by *meaning*, not just keywords.
+**Memento** transforms your passive browser history into an active, searchable knowledge base. Built for the **CodeKada**, it uses AI to index what you've read, watched, and thought—allowing you to search your digital life by *meaning*, not just keywords.
 
 ---
 
