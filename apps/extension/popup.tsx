@@ -37,6 +37,50 @@ function IndexPopup() {
       </div>
       
       <button
+        onClick={async () => {
+          try {
+            await navigator.mediaDevices.getUserMedia({ audio: true })
+            alert("Microphone permission granted!")
+          } catch (err) {
+            console.error("Permission denied", err)
+            alert("Failed to get microphone permission. Please check settings.")
+          }
+        }}
+        style={{
+          backgroundColor: "#f3f4f6",
+          color: "#374151",
+          border: "1px solid #d1d5db",
+          padding: "8px 14px",
+          borderRadius: "6px",
+          cursor: "pointer",
+          fontWeight: 600,
+          fontSize: "13px",
+          marginBottom: "8px",
+          transition: "background-color 0.2s"
+        }}>
+        Enable Microphone
+      </button>
+
+      <button
+        onClick={async () => {
+          chrome.runtime.sendMessage({ type: "toggle-record", target: "background" })
+        }}
+        style={{
+          backgroundColor: "#dc2626",
+          color: "white",
+          border: "none",
+          padding: "8px 14px",
+          borderRadius: "6px",
+          cursor: "pointer",
+          fontWeight: 600,
+          fontSize: "13px",
+          marginBottom: "8px",
+          transition: "opacity 0.2s"
+        }}>
+        Test Record
+      </button>
+
+      <button
         onClick={() => {
           chrome.tabs.create({ url: "http://localhost:3000" })
         }}

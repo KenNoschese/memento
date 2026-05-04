@@ -19,6 +19,38 @@ export default function OffscreenPage() {
     return () => chrome.runtime.onMessage.removeListener(handleMessage)
   }, [])
 
+  const uploadAudio = async (blob: Blob, url: string) => {
+    // Standardize on webm for Groq Whisper
+    const audioFile = new File([blob], "voice.webm", { type: "audio/webm" })
+    const formData = new FormData()
+    formData.append("audio", audioFile)
+    formData.append("url", url)
+
+    try {
+      console.log("Offscreen: Uploading to API...")
+      const response = await fetch("http://localhost:3000/api/voice", {
+        method: "POST",
+        body: formData
+      })
+      
+      const result = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(result.error || `Server returned ${response.status}`)
+      }
+      
+      console.log("Offscreen: Upload success!", result)
+    } catch (error) {
+      console.error("Offscreen: Upload failed", error)
+      chrome.runtime.sendMessage({
+        type: "recording-failed",
+        error: `Upload failed: ${(error as Error).message}`,
+        target: "background"
+      })
+      throw error
+    }
+  }
+
   const startRecording = async (url: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -33,10 +65,15 @@ export default function OffscreenPage() {
       }
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" })
-        await uploadAudio(audioBlob, url)
-        stream.getTracks().forEach(track => track.stop())
-        chrome.runtime.sendMessage({ type: "recording-finished", target: "background" })
+        try {
+          const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" })
+          await uploadAudio(audioBlob, url)
+          chrome.runtime.sendMessage({ type: "recording-finished", target: "background" })
+        } catch (error) {
+          // Handled in uploadAudio
+        } finally {
+          stream.getTracks().forEach(track => track.stop())
+        }
       }
 
       mediaRecorder.start()
@@ -55,21 +92,6 @@ export default function OffscreenPage() {
   const stopRecording = () => {
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.stop()
-    }
-  }
-
-  const uploadAudio = async (blob: Blob, url: string) => {
-    const formData = new FormData()
-    formData.append("audio", blob, "voice.webm")
-    formData.append("url", url)
-
-    try {
-      await fetch("http://localhost:3000/api/voice", {
-        method: "POST",
-        body: formData
-      })
-    } catch (error) {
-      console.error("Offscreen: Upload failed", error)
     }
   }
 
