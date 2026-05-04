@@ -35,6 +35,7 @@ const NODE_WIDTH = 220;
 const NODE_HEIGHT = 132;
 const NODE_GAP_X = 44;
 const NODE_GAP_Y = 36;
+const MIN_EDGE_SIMILARITY = 0.55;
 
 function isVoiceNote(memory: MemoryRecord): boolean {
   return memory.type === "voice_note" || memory.title === "Voice Note";
@@ -110,21 +111,37 @@ function cosineSimilarity(left: number[], right: number[]): number {
   return denominator === 0 ? -1 : dotProduct / denominator;
 }
 
+function getNumericEmbedding(
+  embedding: MemoryRecord["embedding"],
+): number[] | null {
+  if (!embedding) {
+    return null;
+  }
+
+  if (Array.isArray(embedding)) {
+    return embedding.every((value) => typeof value === "number")
+      ? embedding
+      : null;
+  }
+
+  return null;
+}
+
 function buildEdges(memories: MemoryRecord[]): Edge[] {
   const edges: Edge[] = [];
   const seenPairs = new Set<string>();
 
   memories.forEach((memory) => {
-    const sourceEmbedding = memory.embedding;
+    const sourceEmbedding = getNumericEmbedding(memory.embedding);
     if (!sourceEmbedding?.length) {
       return;
     }
 
     let bestMatch: MemoryRecord | undefined;
-    let bestScore = 0.75;
+    let bestScore = MIN_EDGE_SIMILARITY;
 
     memories.forEach((candidate) => {
-      const candidateEmbedding = candidate.embedding;
+      const candidateEmbedding = getNumericEmbedding(candidate.embedding);
       if (candidate.id === memory.id || !candidateEmbedding?.length) {
         return;
       }

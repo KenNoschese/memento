@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getErrorMessage } from "@/app/lib/errors";
+import type { MemoryRecord } from "@/app/lib/types";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,6 +14,38 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Allow-Private-Network": "true",
 };
+
+function normalizeEmbedding(
+  embedding: MemoryRecord["embedding"],
+): number[] | null {
+  if (!embedding) {
+    return null;
+  }
+
+  if (Array.isArray(embedding)) {
+    return embedding.filter((value): value is number => typeof value === "number");
+  }
+
+  if (typeof embedding !== "string") {
+    return null;
+  }
+
+  const trimmed = embedding.trim();
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+
+    return parsed.filter((value): value is number => typeof value === "number");
+  } catch {
+    return null;
+  }
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -35,7 +68,12 @@ export async function GET() {
       throw error;
     }
 
-    return NextResponse.json({ memories: data }, { headers: corsHeaders });
+    const memories = (data ?? []).map((memory) => ({
+      ...memory,
+      embedding: normalizeEmbedding(memory.embedding),
+    }));
+
+    return NextResponse.json({ memories }, { headers: corsHeaders });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
     console.error("Memories API Fatal Error:", message);

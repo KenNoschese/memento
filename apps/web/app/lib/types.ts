@@ -4,7 +4,7 @@ export type MemoryRecord = {
   title: string | null;
   content: string | null;
   created_at: string;
-  embedding?: number[] | null;
+  embedding?: number[] | string | null;
   similarity?: number | null;
   type?: string | null;
 };
