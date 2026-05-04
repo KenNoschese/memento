@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getErrorMessage } from "@/app/lib/errors";
+import type { SearchRequest } from "@/app/lib/types";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,7 +10,6 @@ const supabase = createClient(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-// Use gemini-embedding-001 which is confirmed to be available for this API key
 const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
 const corsHeaders = {
@@ -28,46 +28,47 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    const { url, title, content } = await req.json();
-    
-    if (!process.env.GEMINI_API_KEY) {
-      console.error("API: GEMINI_API_KEY is missing from environment variables.");
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500, headers: corsHeaders });
+    const { query } = (await req.json()) as SearchRequest;
+
+    if (!query?.trim()) {
+      return NextResponse.json(
+        { error: "Missing query" },
+        { status: 400, headers: corsHeaders },
+      );
     }
 
-    if (!content) {
-      console.warn("API: Received empty content for URL:", url);
-      return NextResponse.json({ message: "Empty content ignored" }, { status: 200, headers: corsHeaders });
-    }
+    console.log("Search API: Generating embedding for query:", query);
 
-    console.log("API: Generating embedding for:", url);
-
-    // Generate embedding using Gemini
+    // 1. Generate embedding for the search query
     let embedding: number[];
     try {
-      const result = await model.embedContent(content.substring(0, 30000)); // Truncate to avoid API limits
+      const result = await model.embedContent(query);
       embedding = result.embedding.values;
     } catch (geminiError: unknown) {
       const message = getErrorMessage(geminiError);
-      console.error("API: Gemini Embedding Error:", message);
+      console.error("Search API: Gemini Embedding Error:", message);
       throw new Error(`Gemini failed: ${message}`);
     }
 
-    console.log("API: Inserting into Supabase...");
-    const { error: dbError } = await supabase
-      .from("memories")
-      .insert([{ url, title, content, embedding }]);
+    // 2. Query Supabase using RPC
+    console.log("Search API: Querying Supabase match_memories...");
+    const { data: matches, error: dbError } = await supabase.rpc("match_memories", {
+      query_embedding: embedding,
+      match_threshold: 0.3, // Lower threshold for better demo results
+      match_count: 5,
+    });
 
     if (dbError) {
-      console.error("API: Supabase Error:", dbError.message);
+      console.error("Search API: Supabase RPC Error:", dbError.message);
       throw dbError;
     }
 
-    console.log("API: Successfully saved!");
-    return NextResponse.json({ message: "Saved!" }, { headers: corsHeaders });
+    console.log(`Search API: Found ${matches?.length || 0} matches.`);
+
+    return NextResponse.json({ matches }, { headers: corsHeaders });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
-    console.error("API: Final Catch Error:", message);
+    console.error("Search API: Final Catch Error:", message);
     return NextResponse.json(
       { error: message },
       { status: 500, headers: corsHeaders },
