@@ -27,6 +27,21 @@
   "manifest": {
     "host_permissions": [
       "https://*/*", "http://localhost:3000/*"
+    ],
+    "commands": {
+      "toggle-voice-record": {
+        "suggested_key": {
+          "default": "Alt+Shift+V",
+          "mac": "Alt+Shift+V"
+        },
+        "description": "Start/Stop Voice Recording"
+      }
+    },
+    "permissions": [
+      "activeTab",
+      "audio",
+      "offscreen",
+      "tabs"
     ]
   }
 }
