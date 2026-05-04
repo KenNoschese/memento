@@ -9,9 +9,9 @@ async function listModels() {
   for (const m of models) {
     try {
       const model = genAI.getGenerativeModel({ model: m });
-      const result = await model.embedContent("test");
+      await model.embedContent("test");
       console.log(`Model ${m} works!`);
-    } catch (e) {
+    } catch {
       console.log(`Model ${m} failed.`);
     }
   }

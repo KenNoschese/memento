@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Groq } from "groq-sdk";
+import { getErrorMessage } from "@/app/lib/errors";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -108,10 +109,11 @@ export async function POST(req: Request) {
       { message: "Saved!", transcript: text },
       { headers: corsHeaders },
     );
-  } catch (error: any) {
-    console.error("API Voice: Fatal error:", error);
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    console.error("API Voice: Fatal error:", message);
     return NextResponse.json(
-      { error: error.message },
+      { error: message },
       { status: 500, headers: corsHeaders },
     );
   }

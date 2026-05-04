@@ -11,7 +11,7 @@
 *   **Database:** Supabase (PostgreSQL with `pgvector` extension)
 *   **Language:** TypeScript (Strict mode)
 *   **Intelligence APIs:**
-    *   **Embeddings:** OpenAI `text-embedding-3-small` (1536 dims)
+    *   **Embeddings:** Gemini embeddings
     *   **Transcription:** Groq API (Whisper-large-v3) - Chosen for sub-500ms latency.
     *   **Summarization:** Groq API (Llama-3 70B) - Chosen for fast "Morning Briefing" generation.
 
