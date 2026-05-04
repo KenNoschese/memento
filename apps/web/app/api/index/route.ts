@@ -1,34 +1,73 @@
-import { createClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+);
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// Use gemini-embedding-001 which is confirmed to be available for this API key
+const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Private-Network': 'true', // THIS IS THE KEY FOR CHROME
-}
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Private-Network": "true",
+};
 
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: corsHeaders,
-  })
+  });
 }
 
 export async function POST(req: Request) {
   try {
-    const { url, title, content } = await req.json()
-    const { error } = await supabase.from('memories').insert([{ url, title, content }])
+    const { url, title, content } = await req.json();
+    
+    if (!process.env.GEMINI_API_KEY) {
+      console.error("API: GEMINI_API_KEY is missing from environment variables.");
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500, headers: corsHeaders });
+    }
 
-    if (error) throw error
+    if (!content) {
+      console.warn("API: Received empty content for URL:", url);
+      return NextResponse.json({ message: "Empty content ignored" }, { status: 200, headers: corsHeaders });
+    }
 
-    return NextResponse.json({ message: "Saved!" }, { headers: corsHeaders })
+    console.log("API: Generating embedding for:", url);
+
+    // Generate embedding using Gemini
+    let embedding;
+    try {
+      const result = await model.embedContent(content.substring(0, 30000)); // Truncate to avoid API limits
+      embedding = result.embedding.values;
+    } catch (geminiError: any) {
+      console.error("API: Gemini Embedding Error:", geminiError.message);
+      throw new Error(`Gemini failed: ${geminiError.message}`);
+    }
+
+    console.log("API: Inserting into Supabase...");
+    const { error: dbError } = await supabase
+      .from("memories")
+      .insert([{ url, title, content, embedding }]);
+
+    if (dbError) {
+      console.error("API: Supabase Error:", dbError.message);
+      throw dbError;
+    }
+
+    console.log("API: Successfully saved!");
+    return NextResponse.json({ message: "Saved!" }, { headers: corsHeaders });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders })
+    console.error("API: Final Catch Error:", error.message);
+    return NextResponse.json(
+      { error: error.message || "Internal Server Error" },
+      { status: 500, headers: corsHeaders },
+    );
   }
 }

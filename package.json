@@ -1,0 +1,15 @@
+{
+  "name": "memento-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "supabase"
+  ],
+  "scripts": {
+    "dev:ext": "npm run dev -w apps-extension",
+    "dev:web": "npm run dev -w web"
+  },
+  "devDependencies": {
+    "supabase": "*"
+  }
+}
