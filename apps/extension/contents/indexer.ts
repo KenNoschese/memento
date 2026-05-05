@@ -1,6 +1,28 @@
 import { Readability } from "@mozilla/readability"
 
 const extractAndSend = async () => {
+  // 0. Check settings
+  const settings = await chrome.storage.local.get(["isIndexingEnabled", "denylist"])
+  const isEnabled = settings.isIndexingEnabled !== false // default to true
+  const denylist = (settings.denylist as string[]) || ["localhost", "127.0.0.1"]
+
+  if (!isEnabled) {
+    console.log("Memento: Indexing is disabled. Skipping.")
+    return
+  }
+
+  const currentUrl = window.location.href
+  const hostname = window.location.hostname
+
+  const isBlocked = denylist.some(pattern => 
+    hostname.includes(pattern) || currentUrl.includes(pattern)
+  )
+
+  if (isBlocked) {
+    console.log(`Memento: URL "${currentUrl}" matches denylist pattern. Skipping.`)
+    return
+  }
+
   console.log("Memento: Starting extraction...")
 
   // 1. Extract the "meat" of the page 

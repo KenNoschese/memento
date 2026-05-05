@@ -40,6 +40,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Empty content ignored" }, { status: 200, headers: corsHeaders });
     }
 
+    console.log("API: Checking for duplicates for:", url);
+    const { data: existing, error: checkError } = await supabase
+      .from("memories")
+      .select("id, content")
+      .eq("url", url)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error("API: Duplicate check error:", checkError.message);
+    }
+
+    if (existing && existing.content === content) {
+      console.log("API: Exact content already indexed for this URL. Skipping.");
+      return NextResponse.json({ message: "Duplicate content skipped" }, { status: 200, headers: corsHeaders });
+    }
+
     console.log("API: Generating embedding for:", url);
 
     // Generate embedding using Gemini

@@ -41,6 +41,7 @@
       "activeTab",
       "audio",
       "offscreen",
+      "storage",
       "tabs"
     ]
   }

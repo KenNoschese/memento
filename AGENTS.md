@@ -207,20 +207,6 @@ Main files:
 ## Known Constraints and Active Problems
 These are current repo realities and should influence design decisions:
 
-- **Duplicate indexing risk**
-  - page capture currently posts after load with no real dedupe guard
-  - refreshing or revisiting the same page can create duplicate memories
-
-- **No real site exclusion policy yet**
-  - the extension currently runs too broadly
-  - internal pages and the project dashboard itself are not properly blocked yet
-
-- **No proper reload policy yet**
-  - content capture does not distinguish first visit from reload/update
-
-- **Extension control modes are incomplete**
-  - the UI implies always-on behavior, but there is no proper user-configurable capture mode
-
 - **Voice-to-page attachment is weak**
   - voice notes are stored with a URL, but the relationship is not modeled strongly enough for reliable organization
 
@@ -237,14 +223,11 @@ If you fix one of these, update this section.
 ## Near-Term Priorities
 Current recommended build order:
 
-1. Extension control modes and site exclusions
-2. Reload/dedupe protection
-3. Explicit voice-to-page attachment
-4. Sessions/folders
-5. Relation-based organization and richer grouping
+1. Explicit voice-to-page attachment
+2. Sessions/folders
+3. Relation-based organization and richer grouping
 
 Reasoning:
-- trust and capture control come first
 - data relationships come second
 - organization layers come after the capture model is stable
 
