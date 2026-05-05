@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "backfill:summaries": "node --env-file=.env.local scripts/backfill-page-summaries.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

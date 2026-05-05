@@ -134,7 +134,7 @@ Expected variables include:
 1. The extension content script runs on page load.
 2. It waits before extracting content using `Readability`.
 3. It posts `{ url, title, content }` to `apps/web/app/api/index/route.ts`.
-4. The web app generates a Gemini embedding and stores the memory in Supabase.
+4. The web app generates a concise page summary plus a Gemini embedding and stores the memory in Supabase.
 
 Main files:
 - `apps/extension/contents/indexer.ts`
@@ -144,8 +144,8 @@ Main files:
 1. The extension background worker listens for explicit start/stop voice shortcuts and popup actions.
 2. It creates or reuses an offscreen document.
 3. The offscreen page records microphone audio.
-4. The offscreen page uploads the recording plus active tab URL to `apps/web/app/api/voice/route.ts`.
-5. The web app transcribes with Groq Whisper, embeds with Gemini, and stores the result in Supabase.
+4. The offscreen page uploads the recording plus active tab URL/title to `apps/web/app/api/voice/route.ts`.
+5. The web app transcribes with Groq Whisper, resolves or creates the canonical page memory, embeds with Gemini, and stores the voice note as a child memory in Supabase.
 
 Main files:
 - `apps/extension/background/index.ts`
@@ -175,8 +175,8 @@ Main files:
 ### Memory Browser Flow
 - The dashboard fetches `/api/memories`.
 - The current UI is a two-pane layout:
-  - left pane: briefing, search, memory list
-  - right pane: selected memory details
+  - left pane: briefing, search, page list
+  - right pane: selected page details with attached voice notes
 
 Main files:
 - `apps/web/app/api/memories/route.ts`
@@ -193,11 +193,15 @@ Main files:
 - The repo contains `supabase/migrate_memories_contract.sql` as the current authoritative schema.
 - Memory records currently rely on:
   - `url`
+  - `canonical_url`
   - `title`
   - `content`
+  - `summary` (default readable recap for dashboard rendering)
   - `audio` (Base64 string for voice notes)
   - `embedding` (vector(3072))
   - `type`
+  - `parent_memory_id` (voice notes attach to a page memory)
+  - `is_placeholder` (page anchor created before page indexing completes)
   - `dedupe_key`
   - `created_at`
 
@@ -212,8 +216,11 @@ Main files:
 ## Known Constraints and Active Problems
 These are current repo realities and should influence design decisions:
 
-- **Voice-to-page attachment is weak**
-  - voice notes are stored with a URL, but the relationship is not modeled strongly enough for reliable organization
+- **Voice attachment now depends on canonical page identity**
+  - voice notes attach to a canonical page memory, and placeholder page anchors may exist until indexing fills them in
+
+- **Readability output is intentionally preserved**
+  - page summaries are now the default reading surface, while raw extracted text remains stored for search and manual inspection
 
 - **Localhost coupling**
   - extension network calls are still pinned to local dev URLs
@@ -228,9 +235,9 @@ If you fix one of these, update this section.
 ## Near-Term Priorities
 Current recommended build order:
 
-1. Explicit voice-to-page attachment
-2. Sessions/folders
-3. Relation-based organization and richer grouping
+1. Sessions/folders
+2. Relation-based organization and richer grouping
+3. Reduce localhost coupling
 
 Reasoning:
 - data relationships come second

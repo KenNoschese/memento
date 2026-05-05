@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Groq } from "groq-sdk";
 import { getErrorMessage } from "@/app/lib/errors";
-import { buildMemoryDedupeKey, isUniqueViolation } from "@/app/lib/memories";
+import { generatePageSummary } from "@/app/lib/page-summaries";
+import { buildMemoryDedupeKey, canonicalizeUrl, isUniqueViolation } from "@/app/lib/memories";
+import { ensurePageMemoryAttachment } from "@/app/lib/page-memories";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,6 +35,7 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File;
     const url = formData.get("url") as string;
+    const title = formData.get("title") as string | null;
 
     if (!audioFile || !url) {
       console.error("API Voice: Missing audio or URL");
@@ -84,9 +87,14 @@ export async function POST(req: Request) {
       );
     }
 
+    const canonicalUrl = canonicalizeUrl(url);
+    const pageMemory = await ensurePageMemoryAttachment(supabase, { url, title });
+
     const dedupeKey = buildMemoryDedupeKey({
       type: "voice_note",
       url,
+      canonicalUrl,
+      parentMemoryId: pageMemory.id,
       title: "Voice Note",
       content: text,
     });
@@ -114,16 +122,32 @@ export async function POST(req: Request) {
     const embedding = embeddingResult.embedding.values;
     console.log("API Voice: Embedding size:", embedding.length);
 
+    let tags: string[] = [];
+    try {
+      const summaryResult = await generatePageSummary({
+        url,
+        title: "Voice Note",
+        content: text,
+      });
+      tags = summaryResult.tags;
+    } catch (tagError: unknown) {
+      console.warn("API Voice: Tag generation failed:", getErrorMessage(tagError));
+    }
+
     console.log("API Voice: Inserting into Supabase...");
     const { error: dbError } = await supabase.from("memories").insert([
       {
         url,
+        canonical_url: canonicalUrl,
         title: "Voice Note",
         content: text,
         audio: audioB64,
         embedding,
         type: "voice_note",
+        parent_memory_id: pageMemory.id,
+        is_placeholder: false,
         dedupe_key: dedupeKey,
+        tags,
       },
     ]);
 

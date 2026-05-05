@@ -2,7 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getErrorMessage } from "@/app/lib/errors";
-import type { SearchRequest } from "@/app/lib/types";
+import type {
+  PageMemoryRecord,
+  SearchRequest,
+  VoiceNoteRecord,
+} from "@/app/lib/types";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,7 +70,94 @@ export async function POST(req: Request) {
 
     console.log(`Search API: Found ${matches?.length || 0} matches.`);
 
-    return NextResponse.json({ matches }, { headers: corsHeaders });
+    type RpcMatch = {
+      id: string;
+      parent_memory_id: string | null;
+      url: string;
+      canonical_url: string;
+      title: string | null;
+      content: string | null;
+      summary?: string | null;
+      audio: string | null;
+      embedding: number[] | string | null;
+      type: "page" | "voice_note";
+      is_placeholder: boolean;
+      similarity: number;
+    };
+
+    const groupedMatchIds = new Set<string>();
+    const matchedVoiceNoteIdsByPage = new Map<string, string[]>();
+
+    for (const match of (matches ?? []) as RpcMatch[]) {
+      const pageId = match.parent_memory_id ?? match.id;
+      groupedMatchIds.add(pageId);
+
+      if (match.type === "voice_note" && match.parent_memory_id) {
+        const existing = matchedVoiceNoteIdsByPage.get(match.parent_memory_id) ?? [];
+        existing.push(match.id);
+        matchedVoiceNoteIdsByPage.set(match.parent_memory_id, existing);
+      }
+    }
+
+    const pageIds = [...groupedMatchIds];
+    if (pageIds.length === 0) {
+      return NextResponse.json({ matches: [] }, { headers: corsHeaders });
+    }
+
+    const { data: pages, error: pageError } = await supabase
+      .from("memories")
+      .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .eq("type", "page")
+      .in("id", pageIds);
+
+    if (pageError) {
+      throw pageError;
+    }
+
+    const { data: voiceNotes, error: voiceError } = await supabase
+      .from("memories")
+      .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .eq("type", "voice_note")
+      .in("parent_memory_id", pageIds)
+      .order("created_at", { ascending: false });
+
+    if (voiceError) {
+      throw voiceError;
+    }
+
+    const voiceNotesByPageId = new Map<string, VoiceNoteRecord[]>();
+    for (const note of voiceNotes ?? []) {
+      if (!note.parent_memory_id) {
+        continue;
+      }
+
+      const record: VoiceNoteRecord = {
+        ...note,
+        type: "voice_note",
+        parent_memory_id: note.parent_memory_id,
+        matched_in_search: (matchedVoiceNoteIdsByPage.get(note.parent_memory_id) ?? []).includes(note.id),
+      };
+
+      const existing = voiceNotesByPageId.get(note.parent_memory_id) ?? [];
+      existing.push(record);
+      voiceNotesByPageId.set(note.parent_memory_id, existing);
+    }
+
+    const pageOrder = new Map<string, number>();
+    pageIds.forEach((id, index) => pageOrder.set(id, index));
+
+    const pageMatches: PageMemoryRecord[] = (pages ?? [])
+      .map((page) => ({
+        ...page,
+        type: "page" as const,
+        parent_memory_id: null,
+        is_placeholder: Boolean(page.is_placeholder),
+        voiceNotes: voiceNotesByPageId.get(page.id) ?? [],
+        matchedVoiceNoteIds: matchedVoiceNoteIdsByPage.get(page.id) ?? [],
+      }))
+      .sort((a, b) => (pageOrder.get(a.id) ?? 0) - (pageOrder.get(b.id) ?? 0));
+
+    return NextResponse.json({ matches: pageMatches }, { headers: corsHeaders });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
     console.error("Search API: Final Catch Error:", message);

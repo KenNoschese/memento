@@ -1,4 +1,5 @@
 import { Readability } from "@mozilla/readability"
+
 import { getApiBaseUrl } from "../config"
 
 // Prevent duplicate indexing runs for the same page
@@ -53,7 +54,9 @@ const handleLocationChange = () => {
   lastIndexedUrl = href
   // give SPA content a moment to render
   setTimeout(() => {
-    triggerIndexIfNotIndexed().catch((e) => console.error("SPA index failed", e))
+    triggerIndexIfNotIndexed().catch((e) =>
+      console.error("SPA index failed", e)
+    )
   }, SPA_DEBOUNCE_MS)
 }
 
@@ -111,7 +114,10 @@ const extractAndSend = async () => {
       "denylist"
     ])
     const isEnabled = settings.isIndexingEnabled !== false // default to true
-    const denylist = (settings.denylist as string[]) || ["localhost", "127.0.0.1"]
+    const denylist = (settings.denylist as string[]) || [
+      "localhost",
+      "127.0.0.1"
+    ]
 
     if (!isEnabled) {
       console.log("Memento: Indexing is disabled. Skipping.")
@@ -121,8 +127,8 @@ const extractAndSend = async () => {
     const currentUrl = window.location.href
     const hostname = window.location.hostname
 
-    const isBlocked = denylist.some((pattern) =>
-      hostname.includes(pattern) || currentUrl.includes(pattern)
+    const isBlocked = denylist.some(
+      (pattern) => hostname.includes(pattern) || currentUrl.includes(pattern)
     )
 
     if (isBlocked) {
@@ -162,17 +168,19 @@ const extractAndSend = async () => {
         console.error("Memento: API returned error status:", response.status)
       }
     } else {
-      console.warn("Memento: Readability could not find any content on this page.")
+      console.warn(
+        "Memento: Readability could not find any content on this page."
+      )
     }
   } catch (error) {
     console.error("Memento: Error during indexing process:", error)
   }
 }
 
-// The 30-Second Rule
+// The 5 second rule
 window.addEventListener("load", () => {
-  console.log("Memento: Content script loaded. Timer started (30s)...")
-  setTimeout(extractAndSend, 30000)
+  console.log("Memento: Content script loaded. Timer started (5s)...")
+  setTimeout(extractAndSend, 5000)
 })
 
 // Additional indexing listeners to support SPAs and quick exits
