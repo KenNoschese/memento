@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react"
+import { getApiBaseUrl } from "../config"
 
 export default function OffscreenPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -28,7 +29,8 @@ export default function OffscreenPage() {
 
     try {
       console.log("Offscreen: Uploading to API...")
-      const response = await fetch("http://localhost:3000/api/voice", {
+      const apiBaseUrl = await getApiBaseUrl()
+      const response = await fetch(`${apiBaseUrl}/api/voice`, {
         method: "POST",
         body: formData
       })
