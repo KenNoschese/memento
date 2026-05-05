@@ -1,7 +1,7 @@
 "use client";
 
 import * as Select from "@radix-ui/react-select";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
   Brain,
@@ -42,25 +42,6 @@ function formatTimestamp(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
-}
-
-function playVoiceNote(note: VoiceNoteRecord) {
-  if (note.audio) {
-    const audio = new Audio(note.audio);
-    audio.play().catch((err) => {
-      console.error("Playback failed:", err);
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(note.content || "");
-      window.speechSynthesis.speak(utterance);
-    });
-    return;
-  }
-
-  if (note.content) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(note.content);
-    window.speechSynthesis.speak(utterance);
-  }
 }
 
 function SectionLabel({
@@ -191,11 +172,15 @@ function VoiceQuoteCard({
   pageTitle,
   pageId,
   onSelectMemory,
+  onPlay,
+  isPlaying,
 }: {
   note: VoiceNoteRecord;
   pageTitle: string;
   pageId: string;
   onSelectMemory: (id: string) => void;
+  onPlay: (note: VoiceNoteRecord) => void;
+  isPlaying: boolean;
 }) {
   return (
     <article className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm">
@@ -205,10 +190,15 @@ function VoiceQuoteCard({
         </span>
         <button
           type="button"
-          onClick={() => playVoiceNote(note)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--accent-edge)] bg-[var(--accent-soft)] text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white"
+          onClick={() => onPlay(note)}
+          disabled={isPlaying}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--accent-edge)] bg-[var(--accent-soft)] text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
         >
-          <Play size={14} fill="currentColor" />
+          {isPlaying ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Play size={14} fill="currentColor" />
+          )}
         </button>
       </div>
       <p className="mt-4 text-base leading-7 text-[var(--foreground)]">
@@ -295,11 +285,15 @@ function LandingView({
   isLoadingBriefing,
   memories,
   onSelectMemory,
+  onPlayVoiceNote,
+  playingVoiceNoteId,
 }: {
   briefing: BriefingResponse;
   isLoadingBriefing: boolean;
   memories: PageMemoryRecord[];
   onSelectMemory: (id: string) => void;
+  onPlayVoiceNote: (note: VoiceNoteRecord) => void;
+  playingVoiceNoteId: string | null;
 }) {
   const recentVoiceNotes = useMemo(() => {
     const allNotes: (VoiceNoteRecord & { pageTitle: string; pageId: string })[] =
@@ -412,6 +406,8 @@ function LandingView({
                   pageId={note.pageId}
                   pageTitle={note.pageTitle}
                   onSelectMemory={onSelectMemory}
+                  onPlay={onPlayVoiceNote}
+                  isPlaying={playingVoiceNoteId === note.id}
                 />
               ))
             ) : (
@@ -451,6 +447,11 @@ export default function Dashboard() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [playingVoiceNoteId, setPlayingVoiceNoteId] = useState<string | null>(
+    null,
+  );
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const filteredMemories = useMemo(() => {
     return memories.filter((memory) => {
@@ -703,6 +704,59 @@ export default function Dashboard() {
     }
   };
 
+  const handlePlayVoiceNote = useCallback(
+    (note: VoiceNoteRecord) => {
+      if (playingVoiceNoteId) {
+        return;
+      }
+
+      const finishPlayback = () => {
+        activeAudioRef.current = null;
+        activeUtteranceRef.current = null;
+        setPlayingVoiceNoteId(null);
+      };
+
+      setPlayingVoiceNoteId(note.id);
+
+      if (note.audio) {
+        const audio = new Audio(note.audio);
+        activeAudioRef.current = audio;
+        audio.onended = finishPlayback;
+        audio.onerror = finishPlayback;
+        audio.play().catch((err) => {
+          console.error("Playback failed:", err);
+          activeAudioRef.current = null;
+
+          if (!note.content) {
+            finishPlayback();
+            return;
+          }
+
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(note.content);
+          activeUtteranceRef.current = utterance;
+          utterance.onend = finishPlayback;
+          utterance.onerror = finishPlayback;
+          window.speechSynthesis.speak(utterance);
+        });
+        return;
+      }
+
+      if (note.content) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(note.content);
+        activeUtteranceRef.current = utterance;
+        utterance.onend = finishPlayback;
+        utterance.onerror = finishPlayback;
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+
+      finishPlayback();
+    },
+    [playingVoiceNoteId],
+  );
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       void fetchBriefing();
@@ -742,6 +796,16 @@ export default function Dashboard() {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isResizingSidebar]);
+
+  useEffect(() => {
+    return () => {
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+        activeAudioRef.current.src = "";
+      }
+      window.speechSynthesis.cancel();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] lg:h-screen lg:overflow-hidden">
@@ -1167,11 +1231,16 @@ export default function Dashboard() {
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => playVoiceNote(note)}
-                                  className="inline-flex items-center gap-2 rounded-full border border-[var(--accent-edge)] bg-[var(--accent-soft)] px-3 py-2 text-xs font-medium text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white"
+                                  onClick={() => handlePlayVoiceNote(note)}
+                                  disabled={playingVoiceNoteId === note.id}
+                                  className="inline-flex items-center gap-2 rounded-full border border-[var(--accent-edge)] bg-[var(--accent-soft)] px-3 py-2 text-xs font-medium text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
                                 >
-                                  <Play size={13} fill="currentColor" />
-                                  Play
+                                  {playingVoiceNoteId === note.id ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <Play size={13} fill="currentColor" />
+                                  )}
+                                  {playingVoiceNoteId === note.id ? "Playing" : "Play"}
                                 </button>
                                 <button
                                   type="button"
@@ -1234,6 +1303,8 @@ export default function Dashboard() {
               isLoadingBriefing={isLoadingBriefing}
               memories={memories}
               onSelectMemory={setSelectedMemoryId}
+              onPlayVoiceNote={handlePlayVoiceNote}
+              playingVoiceNoteId={playingVoiceNoteId}
             />
           )}
         </main>
