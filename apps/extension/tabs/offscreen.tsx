@@ -12,7 +12,7 @@ export default function OffscreenPage() {
       if (message.target !== "offscreen") return
 
       if (message.type === "start-recording") {
-        startRecording(message.url)
+        startRecording(message.url, message.title)
       } else if (message.type === "stop-recording") {
         stopRecording()
       }
@@ -29,11 +29,14 @@ export default function OffscreenPage() {
     }
   }, [])
 
-  const uploadAudio = async (blob: Blob, url: string) => {
+  const uploadAudio = async (blob: Blob, url: string, title?: string) => {
     const audioFile = new File([blob], "voice.webm", { type: "audio/webm" })
     const formData = new FormData()
     formData.append("audio", audioFile)
     formData.append("url", url)
+    if (title) {
+      formData.append("title", title)
+    }
 
     try {
       const apiBaseUrl = await getApiBaseUrl()
@@ -58,7 +61,7 @@ export default function OffscreenPage() {
     }
   }
 
-  const startRecording = async (url: string) => {
+  const startRecording = async (url: string, title?: string) => {
     if (isCurrentlyRecording.current) {
       return
     }
@@ -93,7 +96,7 @@ export default function OffscreenPage() {
             return
           }
 
-          await uploadAudio(audioBlob, url)
+          await uploadAudio(audioBlob, url, title)
           chrome.runtime.sendMessage({ type: "recording-finished", target: "background" })
         } catch (error) {
           // Handled in uploadAudio

@@ -2,7 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getErrorMessage } from "@/app/lib/errors";
-import { buildMemoryDedupeKey, isUniqueViolation } from "@/app/lib/memories";
+import { canonicalizeUrl, isUniqueViolation } from "@/app/lib/memories";
+import {
+  buildPageMemoryDedupeKey,
+  findPageMemoryByCanonicalUrl,
+} from "@/app/lib/page-memories";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,9 +33,10 @@ export async function OPTIONS() {
 export async function POST(req: Request) {
   try {
     const { url, title, content } = await req.json();
-    const dedupeKey = buildMemoryDedupeKey({
-      type: "page",
+    const canonicalUrl = canonicalizeUrl(url);
+    const dedupeKey = buildPageMemoryDedupeKey({
       url,
+      canonicalUrl,
       title,
       content,
     });
@@ -54,17 +59,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: existing, error: checkError } = await supabase
-      .from("memories")
-      .select("id")
-      .eq("dedupe_key", dedupeKey)
-      .maybeSingle();
-
-    if (checkError) {
-      console.error("API: Duplicate check error:", checkError.message);
-    }
-
-    if (existing) {
+    const existingPage = await findPageMemoryByCanonicalUrl(supabase, canonicalUrl);
+    if (existingPage?.dedupe_key === dedupeKey && !existingPage.is_placeholder) {
       return NextResponse.json(
         { message: "Duplicate content skipped" },
         { status: 200, headers: corsHeaders },
@@ -83,16 +79,41 @@ export async function POST(req: Request) {
       throw new Error(`Gemini failed: ${message}`);
     }
 
-    const { error: dbError } = await supabase.from("memories").insert([
-      { url, title, content, embedding, type: "page", dedupe_key: dedupeKey },
-    ]);
+    const pageValues = {
+      url,
+      canonical_url: canonicalUrl,
+      title,
+      content,
+      embedding,
+      type: "page" as const,
+      dedupe_key: dedupeKey,
+      is_placeholder: false,
+    };
+
+    const dbError = existingPage
+      ? (
+          await supabase
+            .from("memories")
+            .update(pageValues)
+            .eq("id", existingPage.id)
+        ).error
+      : (await supabase.from("memories").insert([pageValues])).error;
 
     if (dbError) {
       if (isUniqueViolation(dbError)) {
-        return NextResponse.json(
-          { message: "Duplicate content skipped" },
-          { status: 200, headers: corsHeaders },
-        );
+        const attachedPage = await findPageMemoryByCanonicalUrl(supabase, canonicalUrl);
+        if (attachedPage) {
+          const { error: updateError } = await supabase
+            .from("memories")
+            .update(pageValues)
+            .eq("id", attachedPage.id);
+
+          if (!updateError) {
+            return NextResponse.json({ message: "Saved!" }, { headers: corsHeaders });
+          }
+        }
+
+        return NextResponse.json({ message: "Duplicate content skipped" }, { status: 200, headers: corsHeaders });
       }
 
       console.error("API: Supabase Error:", dbError.message);

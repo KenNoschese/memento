@@ -1,7 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getErrorMessage } from "@/app/lib/errors";
-import type { MemoryRecord } from "@/app/lib/types";
+import type {
+  PageMemoryRecord,
+  VoiceNoteRecord,
+} from "@/app/lib/types";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +19,7 @@ const corsHeaders = {
 };
 
 function normalizeEmbedding(
-  embedding: MemoryRecord["embedding"],
+  embedding: PageMemoryRecord["embedding"],
 ): number[] | null {
   if (!embedding) {
     return null;
@@ -56,19 +59,57 @@ export async function OPTIONS() {
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    const { data: pageData, error: pageError } = await supabase
       .from("memories")
-      .select("id, url, title, content, created_at, embedding, type, audio")
+      .select("id, url, canonical_url, title, content, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .eq("type", "page")
       .order("created_at", { ascending: false })
       .limit(100);
 
-    if (error) {
-      throw error;
+    if (pageError) {
+      throw pageError;
     }
 
-    const memories = (data ?? []).map((memory) => ({
+    const pageIds = (pageData ?? []).map((memory) => memory.id);
+
+    const { data: voiceData, error: voiceError } = pageIds.length
+      ? await supabase
+          .from("memories")
+          .select("id, url, canonical_url, title, content, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+          .eq("type", "voice_note")
+          .in("parent_memory_id", pageIds)
+          .order("created_at", { ascending: false })
+      : { data: [], error: null };
+
+    if (voiceError) {
+      throw voiceError;
+    }
+
+    const voiceNotesByPageId = new Map<string, VoiceNoteRecord[]>();
+    for (const memory of voiceData ?? []) {
+      if (!memory.parent_memory_id) {
+        continue;
+      }
+
+      const note: VoiceNoteRecord = {
+        ...memory,
+        embedding: normalizeEmbedding(memory.embedding),
+        type: "voice_note",
+        parent_memory_id: memory.parent_memory_id,
+      };
+
+      const existing = voiceNotesByPageId.get(memory.parent_memory_id) ?? [];
+      existing.push(note);
+      voiceNotesByPageId.set(memory.parent_memory_id, existing);
+    }
+
+    const memories: PageMemoryRecord[] = (pageData ?? []).map((memory) => ({
       ...memory,
       embedding: normalizeEmbedding(memory.embedding),
+      type: "page",
+      parent_memory_id: null,
+      is_placeholder: Boolean(memory.is_placeholder),
+      voiceNotes: voiceNotesByPageId.get(memory.id) ?? [],
     }));
 
     return NextResponse.json({ memories }, { headers: corsHeaders });

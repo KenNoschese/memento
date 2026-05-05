@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
 import { getErrorMessage } from "@/app/lib/errors";
-import type { BriefingResponse, MemoryRecord } from "@/app/lib/types";
+import type { BriefingResponse } from "@/app/lib/types";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,10 +35,11 @@ export async function GET() {
     }
 
     console.log("Briefing API: Fetching recent memories...");
-    // 1. Fetch last 10 memories
+    // 1. Fetch last 10 page memories
     const { data: memories, error: dbError } = await supabase
       .from("memories")
       .select("id, title, content, url, created_at")
+      .eq("type", "page")
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -57,7 +58,7 @@ export async function GET() {
 
     console.log("Briefing API: Calling Groq Llama-3...");
     // 2. Prepare context for Groq
-    const context = (memories as MemoryRecord[])
+    const context = (memories ?? [])
       .map((memory, index) => {
         const title = memory.title?.trim() || "Untitled";
         const contentSnippet = memory.content?.trim().slice(0, 500) || "No content captured.";
@@ -85,7 +86,7 @@ export async function GET() {
 
     const response: BriefingResponse = {
       summary,
-      recentUrls: (memories as MemoryRecord[])
+      recentUrls: (memories ?? [])
         .map((memory) => memory.url)
         .filter((url): url is string => Boolean(url))
         .slice(0, 3),

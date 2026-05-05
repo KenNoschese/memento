@@ -106,7 +106,8 @@ async function startRecording() {
         await chrome.runtime.sendMessage({ 
           type: "start-recording", 
           target: "offscreen", 
-          url: tab.url 
+          url: tab.url,
+          title: tab.title ?? ""
         })
         return true
       } catch (e) {

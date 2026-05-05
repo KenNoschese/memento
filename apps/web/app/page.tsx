@@ -6,31 +6,46 @@ import {
   Brain,
   ExternalLink,
   Loader2,
-  Mic,
   Play,
   Search,
   Trash2,
 } from "lucide-react";
 import type {
   BriefingResponse,
-  MemoryRecord,
+  PageMemoryRecord,
   SearchResponse,
+  VoiceNoteRecord,
 } from "@/app/lib/types";
 
 type MemoriesResponse = {
-  memories: MemoryRecord[];
+  memories: PageMemoryRecord[];
 };
-
-function isVoiceNote(memory: MemoryRecord): boolean {
-  return memory.type === "voice_note";
-}
 
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString();
 }
 
+function playVoiceNote(note: VoiceNoteRecord) {
+  if (note.audio) {
+    const audio = new Audio(note.audio);
+    audio.play().catch((err) => {
+      console.error("Playback failed:", err);
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(note.content || "");
+      window.speechSynthesis.speak(utterance);
+    });
+    return;
+  }
+
+  if (note.content) {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(note.content);
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
 export default function Dashboard() {
-  const [memories, setMemories] = useState<MemoryRecord[]>([]);
+  const [memories, setMemories] = useState<PageMemoryRecord[]>([]);
   const [briefing, setBriefing] = useState<BriefingResponse>({
     summary: "",
     recentUrls: [],
@@ -122,7 +137,7 @@ export default function Dashboard() {
           throw new Error("error" in data ? data.error : "Search failed");
         }
 
-        const matchIds = data.matches.map((match: MemoryRecord) => match.id);
+        const matchIds = data.matches.map((match) => match.id);
         setHighlightedIds(matchIds);
         if (matchIds[0]) {
           setSelectedMemoryId(matchIds[0]);
@@ -136,52 +151,70 @@ export default function Dashboard() {
     [searchQuery],
   );
 
-  const handleDeleteMemory = useCallback(async (memory: MemoryRecord) => {
-    const label = memory.title?.trim() || "Untitled";
-    const confirmed = window.confirm(`Delete "${label}" from your memories?`);
+  const handleDeleteMemory = useCallback(
+    async (memoryId: string, label: string) => {
+      const confirmed = window.confirm(`Delete "${label}" from your memories?`);
 
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingMemoryId(memory.id);
-
-    try {
-      const response = await fetch("/api/memories", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: memory.id }),
-      });
-      const data = (await response.json()) as
-        | { success: boolean }
-        | { error: string };
-
-      if (!response.ok || "error" in data) {
-        throw new Error("error" in data ? data.error : "Delete failed");
+      if (!confirmed) {
+        return;
       }
 
-      setMemories((current) => {
-        const next = current.filter((item) => item.id !== memory.id);
+      setDeletingMemoryId(memoryId);
 
-        setSelectedMemoryId((currentId) => {
-          if (currentId !== memory.id) {
-            return currentId;
+      try {
+        const response = await fetch("/api/memories", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: memoryId }),
+        });
+        const data = (await response.json()) as
+          | { success: boolean }
+          | { error: string };
+
+        if (!response.ok || "error" in data) {
+          throw new Error("error" in data ? data.error : "Delete failed");
+        }
+
+        setMemories((current) => {
+          const next: PageMemoryRecord[] = [];
+
+          for (const page of current) {
+            if (page.id === memoryId) {
+              continue;
+            }
+
+            next.push({
+              ...page,
+              voiceNotes: page.voiceNotes.filter(
+                (note) => note.id !== memoryId,
+              ),
+              matchedVoiceNoteIds: page.matchedVoiceNoteIds?.filter(
+                (id) => id !== memoryId,
+              ),
+            });
           }
 
-          return next[0]?.id ?? null;
+          setSelectedMemoryId((currentId) => {
+            if (currentId !== memoryId) {
+              return currentId;
+            }
+
+            return next[0]?.id ?? null;
+          });
+
+          return next;
         });
 
-        return next;
-      });
-
-      setHighlightedIds((current) => current.filter((id) => id !== memory.id));
-    } catch (error) {
-      console.error("Delete failed:", error);
-      window.alert("Unable to delete this memory right now.");
-    } finally {
-      setDeletingMemoryId(null);
-    }
-  }, []);
+        setHighlightedIds((current) => current.filter((id) => id !== memoryId));
+      } catch (error) {
+        console.error("Delete failed:", error);
+        window.alert("Unable to delete this memory right now.");
+      } finally {
+        setDeletingMemoryId(null);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -263,7 +296,7 @@ export default function Dashboard() {
           <div className="mb-3 px-2 text-xs uppercase tracking-[0.14em] text-zinc-500">
             {highlightedIds.length > 0
               ? `${highlightedIds.length} search matches`
-              : `${memories.length} memories`}
+              : `${memories.length} pages`}
           </div>
 
           <div className="space-y-1">
@@ -292,35 +325,37 @@ export default function Dashboard() {
                   } ${highlighted ? "opacity-100" : "opacity-45"}`}
                 >
                   <div className="flex w-full items-center justify-between gap-3">
-                    <span className="truncate text-sm font-medium">
-                      {memory.title?.trim() || "Untitled"}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {isVoiceNote(memory) ? <Mic size={14} /> : null}
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleDeleteMemory(memory);
-                        }}
-                        aria-label={`Delete ${memory.title?.trim() || "memory"}`}
-                        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition ${
-                          selected
-                            ? "border-white/10 text-zinc-300 hover:border-white/20 hover:bg-white/8 hover:text-white"
-                            : "border-transparent text-zinc-400 opacity-0 hover:border-zinc-200 hover:bg-white hover:text-zinc-700 group-hover:opacity-100"
-                        } ${
-                          deletingMemoryId === memory.id
-                            ? "pointer-events-none opacity-100"
-                            : ""
-                        }`}
-                      >
-                        {deletingMemoryId === memory.id ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={14} />
-                        )}
-                      </button>
+                    <div className="min-w-0">
+                      <span className="truncate text-sm font-medium">
+                        {memory.title?.trim() || "Untitled"}
+                      </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleDeleteMemory(
+                          memory.id,
+                          memory.title?.trim() || "memory",
+                        );
+                      }}
+                      aria-label={`Delete ${memory.title?.trim() || "memory"}`}
+                      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition ${
+                        selected
+                          ? "border-white/10 text-zinc-300 hover:border-white/20 hover:bg-white/8 hover:text-white"
+                          : "border-transparent text-zinc-400 opacity-0 hover:border-zinc-200 hover:bg-white hover:text-zinc-700 group-hover:opacity-100"
+                      } ${
+                        deletingMemoryId === memory.id
+                          ? "pointer-events-none opacity-100"
+                          : ""
+                      }`}
+                    >
+                      {deletingMemoryId === memory.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                    </button>
                   </div>
 
                   <span
@@ -331,13 +366,17 @@ export default function Dashboard() {
                     {memory.content?.trim() || memory.url}
                   </span>
 
-                  <span
-                    className={`text-[11px] ${
+                  <div
+                    className={`flex w-full items-center justify-between text-[11px] ${
                       selected ? "text-zinc-400" : "text-zinc-400"
                     }`}
                   >
-                    {formatTimestamp(memory.created_at)}
-                  </span>
+                    <span>{formatTimestamp(memory.created_at)}</span>
+                    <span className="text-red-400">
+                      {memory.voiceNotes.length} voice note
+                      {memory.voiceNotes.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
                 </div>
               );
             })}
@@ -351,14 +390,10 @@ export default function Dashboard() {
             <div className="mb-6 flex items-start justify-between gap-6 border-b border-zinc-200 pb-6">
               <div className="min-w-0">
                 <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-zinc-500">
-                  {isVoiceNote(selectedMemory) ? (
-                    <>
-                      <Mic size={14} />
-                      <span>Voice Note</span>
-                    </>
-                  ) : (
-                    <span>Page Memory</span>
-                  )}
+                  <span>Page Memory</span>
+                  {selectedMemory.is_placeholder ? (
+                    <span>Placeholder</span>
+                  ) : null}
                 </div>
 
                 <h2 className="text-2xl font-semibold text-zinc-950">
@@ -380,39 +415,14 @@ export default function Dashboard() {
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                {isVoiceNote(selectedMemory) ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selectedMemory.audio) {
-                        const audio = new Audio(selectedMemory.audio);
-                        audio.play().catch((err) => {
-                          console.error("Playback failed:", err);
-                          // Fallback to TTS if audio fails
-                          window.speechSynthesis.cancel();
-                          const utterance = new SpeechSynthesisUtterance(
-                            selectedMemory.content || "",
-                          );
-                          window.speechSynthesis.speak(utterance);
-                        });
-                      } else if (selectedMemory.content) {
-                        window.speechSynthesis.cancel();
-                        const utterance = new SpeechSynthesisUtterance(
-                          selectedMemory.content,
-                        );
-                        window.speechSynthesis.speak(utterance);
-                      }
-                    }}
-                    className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 hover:border-red-300 cursor-pointer"
-                  >
-                    <Play size={15} fill="currentColor" />
-                    {selectedMemory.audio ? "Play Recording" : "Play (TTS)"}
-                  </button>
-                ) : null}
-
                 <button
                   type="button"
-                  onClick={() => void handleDeleteMemory(selectedMemory)}
+                  onClick={() =>
+                    void handleDeleteMemory(
+                      selectedMemory.id,
+                      selectedMemory.title?.trim() || "memory",
+                    )
+                  }
                   disabled={deletingMemoryId === selectedMemory.id}
                   className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -421,16 +431,98 @@ export default function Dashboard() {
                   ) : (
                     <Trash2 size={15} />
                   )}
-                  Delete
+                  Delete Page
                 </button>
               </div>
             </div>
 
-            <article className="prose prose-zinc max-w-none">
-              <div className="whitespace-pre-wrap text-sm leading-7 text-zinc-700">
-                {selectedMemory.content?.trim() || "No content available."}
+            <section className="mb-8">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                Page Content
+              </h3>
+              <article className="prose prose-zinc max-w-none">
+                <div className="whitespace-pre-wrap text-sm leading-7 text-zinc-700">
+                  {selectedMemory.content?.trim() ||
+                    "No content available yet."}
+                </div>
+              </article>
+            </section>
+
+            <section>
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                  Attached Voice Notes
+                </h3>
+                <span className="text-xs text-zinc-400">
+                  {selectedMemory.voiceNotes.length} total
+                </span>
               </div>
-            </article>
+
+              {selectedMemory.voiceNotes.length > 0 ? (
+                <div className="space-y-3">
+                  {selectedMemory.voiceNotes.map((note) => {
+                    const matched =
+                      selectedMemory.matchedVoiceNoteIds?.includes(note.id);
+
+                    return (
+                      <div
+                        key={note.id}
+                        className={`rounded-xl border px-4 py-4 ${
+                          matched
+                            ? "border-blue-200 bg-blue-50/60"
+                            : "border-zinc-200 bg-zinc-50"
+                        }`}
+                      >
+                        <div className="mb-3 flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-sm font-medium text-zinc-900">
+                              Voice Note
+                            </div>
+                            <div className="mt-1 text-xs text-zinc-500">
+                              {formatTimestamp(note.created_at)}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => playVoiceNote(note)}
+                              className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:border-red-300 hover:bg-red-100"
+                            >
+                              <Play size={15} fill="currentColor" />
+                              {note.audio ? "Play Recording" : "Play (TTS)"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleDeleteMemory(note.id, "voice note")
+                              }
+                              disabled={deletingMemoryId === note.id}
+                              className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deletingMemoryId === note.id ? (
+                                <Loader2 size={15} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={15} />
+                              )}
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="whitespace-pre-wrap text-sm leading-6 text-zinc-700">
+                          {note.content?.trim() || "No transcript available."}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-500">
+                  No voice notes attached to this page yet.
+                </div>
+              )}
+            </section>
           </div>
         ) : (
           <div className="flex h-full items-center justify-center px-8 text-sm text-zinc-500">
