@@ -136,55 +136,52 @@ export default function Dashboard() {
     [searchQuery],
   );
 
-  const handleDeleteMemory = useCallback(
-    async (memory: MemoryRecord) => {
-      const label = memory.title?.trim() || "Untitled";
-      const confirmed = window.confirm(`Delete "${label}" from your memories?`);
+  const handleDeleteMemory = useCallback(async (memory: MemoryRecord) => {
+    const label = memory.title?.trim() || "Untitled";
+    const confirmed = window.confirm(`Delete "${label}" from your memories?`);
 
-      if (!confirmed) {
-        return;
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingMemoryId(memory.id);
+
+    try {
+      const response = await fetch("/api/memories", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memory.id }),
+      });
+      const data = (await response.json()) as
+        | { success: boolean }
+        | { error: string };
+
+      if (!response.ok || "error" in data) {
+        throw new Error("error" in data ? data.error : "Delete failed");
       }
 
-      setDeletingMemoryId(memory.id);
+      setMemories((current) => {
+        const next = current.filter((item) => item.id !== memory.id);
 
-      try {
-        const response = await fetch("/api/memories", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: memory.id }),
-        });
-        const data = (await response.json()) as
-          | { success: boolean }
-          | { error: string };
+        setSelectedMemoryId((currentId) => {
+          if (currentId !== memory.id) {
+            return currentId;
+          }
 
-        if (!response.ok || "error" in data) {
-          throw new Error("error" in data ? data.error : "Delete failed");
-        }
-
-        setMemories((current) => {
-          const next = current.filter((item) => item.id !== memory.id);
-
-          setSelectedMemoryId((currentId) => {
-            if (currentId !== memory.id) {
-              return currentId;
-            }
-
-            return next[0]?.id ?? null;
-          });
-
-          return next;
+          return next[0]?.id ?? null;
         });
 
-        setHighlightedIds((current) => current.filter((id) => id !== memory.id));
-      } catch (error) {
-        console.error("Delete failed:", error);
-        window.alert("Unable to delete this memory right now.");
-      } finally {
-        setDeletingMemoryId(null);
-      }
-    },
-    [],
-  );
+        return next;
+      });
+
+      setHighlightedIds((current) => current.filter((id) => id !== memory.id));
+    } catch (error) {
+      console.error("Delete failed:", error);
+      window.alert("Unable to delete this memory right now.");
+    } finally {
+      setDeletingMemoryId(null);
+    }
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -197,7 +194,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen min-h-screen w-full bg-white text-zinc-900">
-      <aside className="flex w-[360px] shrink-0 flex-col border-r border-zinc-200 bg-zinc-50">
+      <aside className="flex w-90 shrink-0 flex-col border-r border-zinc-200 bg-zinc-50">
         <div className="border-b border-zinc-200 bg-white px-5 py-5">
           <div className="mb-2 flex items-center gap-2">
             <Brain size={18} />
@@ -273,7 +270,8 @@ export default function Dashboard() {
             {memories.map((memory) => {
               const selected = memory.id === selectedMemoryId;
               const highlighted =
-                highlightedIds.length === 0 || highlightedIds.includes(memory.id);
+                highlightedIds.length === 0 ||
+                highlightedIds.includes(memory.id);
 
               return (
                 <div
@@ -388,16 +386,20 @@ export default function Dashboard() {
                     onClick={() => {
                       if (selectedMemory.audio) {
                         const audio = new Audio(selectedMemory.audio);
-                        audio.play().catch(err => {
+                        audio.play().catch((err) => {
                           console.error("Playback failed:", err);
                           // Fallback to TTS if audio fails
                           window.speechSynthesis.cancel();
-                          const utterance = new SpeechSynthesisUtterance(selectedMemory.content || "");
+                          const utterance = new SpeechSynthesisUtterance(
+                            selectedMemory.content || "",
+                          );
                           window.speechSynthesis.speak(utterance);
                         });
                       } else if (selectedMemory.content) {
                         window.speechSynthesis.cancel();
-                        const utterance = new SpeechSynthesisUtterance(selectedMemory.content);
+                        const utterance = new SpeechSynthesisUtterance(
+                          selectedMemory.content,
+                        );
                         window.speechSynthesis.speak(utterance);
                       }
                     }}
