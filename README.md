@@ -53,6 +53,7 @@ The repo still includes `reactflow` for future graph-style exploration, but the 
 - Gemini `gemini-embedding-001` for embeddings
 - Groq `whisper-large-v3-turbo` for transcription
 - Groq `llama-3.3-70b-versatile` for briefing by default
+- `memories.type` stored as `page` or `voice_note`
 
 ## How It Works
 
@@ -71,6 +72,12 @@ The repo still includes `reactflow` for future graph-style exploration, but the 
 1. The dashboard sends natural-language search queries to `/api/search`.
 2. The server embeds the query and runs semantic matching through Supabase RPC.
 3. `/api/briefing` summarizes recent memories into a short work-resumption briefing.
+
+## Data Contract
+- embeddings are stored as `vector(768)`
+- page captures are persisted with `type = 'page'`
+- voice notes are persisted with `type = 'voice_note'`
+- UI and filtering should rely on `type`, not title-based inference
 
 ## Local Development
 
@@ -158,4 +165,3 @@ Current web routes include:
 - `/api/search` - semantic search
 - `/api/briefing` - summarize recent memories
 - `/api/memories` - dashboard memory list
-

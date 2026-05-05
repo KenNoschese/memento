@@ -19,7 +19,8 @@ async function checkSchema() {
             url: 'test', 
             title: 'test', 
             content: 'test', 
-            embedding: new Array(768).fill(0) 
+            embedding: new Array(768).fill(0),
+            type: 'page',
         }]);
         if (insertError) {
             console.error("Insert failed:", insertError.message);

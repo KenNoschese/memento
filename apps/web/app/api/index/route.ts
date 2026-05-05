@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     console.log("API: Inserting into Supabase...");
     const { error: dbError } = await supabase
       .from("memories")
-      .insert([{ url, title, content, embedding }]);
+      .insert([{ url, title, content, embedding, type: "page" }]);
 
     if (dbError) {
       console.error("API: Supabase Error:", dbError.message);

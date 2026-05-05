@@ -67,6 +67,7 @@ export async function POST(req: Request) {
         title: "Voice Note",
         content: text,
         embedding,
+        type: "voice_note",
       },
     ]);
 
@@ -78,30 +79,7 @@ export async function POST(req: Request) {
         dbError.code,
         ")",
       );
-      // PGRST204 means column not found in schema cache
-      if (
-        dbError.code === "PGRST204" ||
-        dbError.message.includes('column "type" does not exist')
-      ) {
-        console.log("API Voice: Retrying insert without 'type' column...");
-        const { error: retryError } = await supabase.from("memories").insert([
-          {
-            url,
-            title: "Voice Note",
-            content: text,
-            embedding,
-          },
-        ]);
-        if (retryError) {
-          console.error(
-            "API Voice: Supabase retry insert error:",
-            retryError.message,
-          );
-          throw retryError;
-        }
-      } else {
-        throw dbError;
-      }
+      throw dbError;
     }
 
     console.log("API Voice: Successfully saved!");
