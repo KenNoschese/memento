@@ -1,9 +1,11 @@
 "use client";
 
+import * as Select from "@radix-ui/react-select";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
   Brain,
+  Check,
   ChevronsLeft,
   ChevronsRight,
   ChevronDown,
@@ -221,6 +223,70 @@ function VoiceQuoteCard({
         <ExternalLink size={14} className="shrink-0" />
       </button>
     </article>
+  );
+}
+
+function FolderPicker({
+  folders,
+  value,
+  onChange,
+}: {
+  folders: Folder[];
+  value: string | null;
+  onChange: (folderId: string | null) => void;
+}) {
+  return (
+    <Select.Root
+      value={value ?? "__none__"}
+      onValueChange={(nextValue) =>
+        onChange(nextValue === "__none__" ? null : nextValue)
+      }
+    >
+      <Select.Trigger className="inline-flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] py-2.5 pl-4 pr-10 text-sm text-[var(--muted)] shadow-sm transition hover:border-[var(--accent-edge)] hover:text-[var(--foreground)] data-[state=open]:border-[var(--accent-edge)]">
+        <FolderIcon size={15} className="text-[var(--muted-strong)]" />
+        <Select.Value
+          placeholder="No Folder"
+          className="min-w-34 text-left text-sm font-medium text-[var(--foreground)]"
+        />
+        <Select.Icon className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted)]">
+          <ChevronDown size={15} />
+        </Select.Icon>
+      </Select.Trigger>
+
+      <Select.Portal>
+        <Select.Content
+          position="popper"
+          sideOffset={8}
+          align="end"
+          className="z-30 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[0_12px_30px_rgba(38,33,28,0.12)]"
+        >
+          <Select.Viewport>
+            <Select.Item
+              value="__none__"
+              className="relative flex cursor-default items-center rounded-xl py-2.5 pl-9 pr-3 text-sm text-[var(--foreground-soft)] outline-none transition data-[highlighted]:bg-[var(--surface-soft)] data-[highlighted]:text-[var(--foreground)] data-[state=checked]:bg-[var(--accent-soft)] data-[state=checked]:text-[var(--accent)]"
+            >
+              <Select.ItemIndicator className="absolute left-3 inline-flex items-center text-[var(--accent)]">
+                <Check size={14} />
+              </Select.ItemIndicator>
+              <Select.ItemText>No Folder</Select.ItemText>
+            </Select.Item>
+
+            {folders.map((folder) => (
+              <Select.Item
+                key={folder.id}
+                value={folder.id}
+                className="relative mt-1 flex cursor-default items-center rounded-xl py-2.5 pl-9 pr-3 text-sm text-[var(--foreground-soft)] outline-none transition data-[highlighted]:bg-[var(--surface-soft)] data-[highlighted]:text-[var(--foreground)] data-[state=checked]:bg-[var(--accent-soft)] data-[state=checked]:text-[var(--accent)]"
+              >
+                <Select.ItemIndicator className="absolute left-3 inline-flex items-center text-[var(--accent)]">
+                  <Check size={14} />
+                </Select.ItemIndicator>
+                <Select.ItemText>{folder.name}</Select.ItemText>
+              </Select.Item>
+            ))}
+          </Select.Viewport>
+        </Select.Content>
+      </Select.Portal>
+    </Select.Root>
   );
 }
 
@@ -995,26 +1061,13 @@ export default function Dashboard() {
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row lg:flex-col lg:items-end">
-                    <label className="inline-flex items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--surface-soft)] px-4 py-2.5 text-sm text-[var(--muted)]">
-                      <FolderIcon size={15} className="text-[var(--muted-strong)]" />
-                      <select
-                        value={selectedMemory.folder_id || ""}
-                        onChange={(event) =>
-                          handleMoveToFolder(
-                            selectedMemory.id,
-                            event.target.value || null,
-                          )
-                        }
-                        className="bg-transparent pr-6 text-sm text-[var(--foreground)] outline-none"
-                      >
-                        <option value="">No Folder</option>
-                        {folders.map((folder) => (
-                          <option key={folder.id} value={folder.id}>
-                            {folder.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <FolderPicker
+                      folders={folders}
+                      value={selectedMemory.folder_id || null}
+                      onChange={(folderId) =>
+                        handleMoveToFolder(selectedMemory.id, folderId)
+                      }
+                    />
                     <button
                       type="button"
                       onClick={() =>
