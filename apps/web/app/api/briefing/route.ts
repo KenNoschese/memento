@@ -10,8 +10,11 @@ const supabase = createClient(
 );
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const briefingModel =
-  process.env.GROQ_BRIEFING_MODEL || "llama-3.3-70b-versatile";
+const BRIEFING_MODEL = "llama-3.1-8b-instant";
+
+// Simple in-memory cache
+let cachedBriefing: { data: BriefingResponse; timestamp: number } | null = null;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,6 +32,12 @@ export async function OPTIONS() {
 
 export async function GET() {
   try {
+    // Check cache
+    if (cachedBriefing && Date.now() - cachedBriefing.timestamp < CACHE_TTL) {
+      console.log("Briefing API: Returning cached briefing");
+      return NextResponse.json(cachedBriefing.data, { headers: corsHeaders });
+    }
+
     if (!process.env.GROQ_API_KEY) {
       console.error("Briefing API: GROQ_API_KEY is missing");
       return NextResponse.json({ error: "Server configuration error" }, { status: 500, headers: corsHeaders });
@@ -56,32 +65,32 @@ export async function GET() {
       return NextResponse.json(emptyResponse, { headers: corsHeaders });
     }
 
-    console.log("Briefing API: Calling Groq Llama-3...");
+    console.log(`Briefing API: Calling Groq ${BRIEFING_MODEL}...`);
     // 2. Prepare context for Groq
     const context = (memories ?? [])
       .map((memory, index) => {
         const title = memory.title?.trim() || "Untitled";
         const contentSnippet =
           memory.summary?.trim() ||
-          memory.content?.trim().slice(0, 500) ||
+          memory.content?.trim().slice(0, 800) ||
           "No content captured.";
-        return `[${index + 1}] Title: ${title}\nContent snippet: ${contentSnippet}`;
+        return `[${index + 1}] Title: ${title}\nURL: ${memory.url}\nContent snippet: ${contentSnippet}`;
       })
       .join("\n\n");
 
-    // 3. Call Groq Llama-3
+    // 3. Call Groq
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant providing a 'Morning Briefing' for a user based on their recent web history and voice notes. Summarize their current intent or workflow in 2-3 concise sentences. Focus on what they are trying to achieve. Do not mention the numbers [1], [2], etc., just provide the narrative summary.",
+          content: "You are a helpful assistant providing a 'Daily Briefing' for a user based on their recent web history. Summarize their current intent or workflow in 2-3 concise sentences. Focus on what they are trying to achieve. Do not mention the numbers [1], [2], etc., just provide the narrative summary.",
         },
         {
           role: "user",
           content: `Here is my recent history:\n\n${context}`,
         },
       ],
-      model: briefingModel,
+      model: BRIEFING_MODEL,
     });
 
     const summary = completion.choices[0]?.message?.content || "Could not generate briefing.";
@@ -94,6 +103,9 @@ export async function GET() {
         .filter((url): url is string => Boolean(url))
         .slice(0, 3),
     };
+
+    // Update cache
+    cachedBriefing = { data: response, timestamp: Date.now() };
 
     return NextResponse.json(response, { headers: corsHeaders });
 

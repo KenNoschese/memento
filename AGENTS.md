@@ -74,7 +74,7 @@ Do not move secrets or direct model calls into the extension.
 ### Current Model Usage
 - **Embeddings:** Gemini `gemini-embedding-001`
 - **Voice transcription:** Groq `whisper-large-v3-turbo`
-- **Briefing/summarization:** Groq, defaulted in code via `GROQ_BRIEFING_MODEL` and currently using `llama-3.3-70b-versatile`
+- **Briefing/summarization:** Groq `llama-3.1-8b-instant` (chosen for its higher free-tier rate limits)
 
 ---
 
@@ -165,7 +165,7 @@ Main files:
 ### Briefing Flow
 1. The dashboard requests `/api/briefing`.
 2. The server fetches recent memories from Supabase.
-3. It summarizes recent activity with Groq.
+3. It summarizes recent activity with Gemini 1.5 Flash.
 4. The dashboard displays the summary and recent URLs.
 
 Main files:
