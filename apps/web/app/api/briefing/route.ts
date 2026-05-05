@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { Groq } from "groq-sdk";
 import { getErrorMessage } from "@/app/lib/errors";
 import type { BriefingResponse } from "@/app/lib/types";
 
@@ -9,8 +9,12 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const BRIEFING_MODEL = "llama-3.1-8b-instant";
+
+// Simple in-memory cache
+let cachedBriefing: { data: BriefingResponse; timestamp: number } | null = null;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,8 +32,14 @@ export async function OPTIONS() {
 
 export async function GET() {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      console.error("Briefing API: GEMINI_API_KEY is missing");
+    // Check cache
+    if (cachedBriefing && Date.now() - cachedBriefing.timestamp < CACHE_TTL) {
+      console.log("Briefing API: Returning cached briefing");
+      return NextResponse.json(cachedBriefing.data, { headers: corsHeaders });
+    }
+
+    if (!process.env.GROQ_API_KEY) {
+      console.error("Briefing API: GROQ_API_KEY is missing");
       return NextResponse.json({ error: "Server configuration error" }, { status: 500, headers: corsHeaders });
     }
 
@@ -55,29 +65,35 @@ export async function GET() {
       return NextResponse.json(emptyResponse, { headers: corsHeaders });
     }
 
-    console.log("Briefing API: Calling Gemini 1.5 Flash...");
-    // 2. Prepare context for Gemini
+    console.log(`Briefing API: Calling Groq ${BRIEFING_MODEL}...`);
+    // 2. Prepare context for Groq
     const context = (memories ?? [])
       .map((memory, index) => {
         const title = memory.title?.trim() || "Untitled";
         const contentSnippet =
           memory.summary?.trim() ||
-          memory.content?.trim().slice(0, 1000) ||
+          memory.content?.trim().slice(0, 800) ||
           "No content captured.";
         return `[${index + 1}] Title: ${title}\nURL: ${memory.url}\nContent snippet: ${contentSnippet}`;
       })
       .join("\n\n");
 
-    // 3. Call Gemini 1.5 Flash
-    const prompt = `You are a helpful assistant providing a 'Daily Briefing' for a user based on their recent web history. 
-Summarize their current intent or workflow in 2-3 concise sentences. Focus on what they are trying to achieve. 
-Do not mention specific indices like [1] or [2], just provide the narrative summary.
+    // 3. Call Groq
+    const completion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: "system",
+          content: "You are a helpful assistant providing a 'Daily Briefing' for a user based on their recent web history. Summarize their current intent or workflow in 2-3 concise sentences. Focus on what they are trying to achieve. Do not mention the numbers [1], [2], etc., just provide the narrative summary.",
+        },
+        {
+          role: "user",
+          content: `Here is my recent history:\n\n${context}`,
+        },
+      ],
+      model: BRIEFING_MODEL,
+    });
 
-Here is the recent history:
-${context}`;
-
-    const result = await model.generateContent(prompt);
-    const summary = result.response.text() || "Could not generate briefing.";
+    const summary = completion.choices[0]?.message?.content || "Could not generate briefing.";
     console.log("Briefing API: Successfully generated summary.");
 
     const response: BriefingResponse = {
@@ -87,6 +103,9 @@ ${context}`;
         .filter((url): url is string => Boolean(url))
         .slice(0, 3),
     };
+
+    // Update cache
+    cachedBriefing = { data: response, timestamp: Date.now() };
 
     return NextResponse.json(response, { headers: corsHeaders });
 

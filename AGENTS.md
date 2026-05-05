@@ -74,7 +74,7 @@ Do not move secrets or direct model calls into the extension.
 ### Current Model Usage
 - **Embeddings:** Gemini `gemini-embedding-001`
 - **Voice transcription:** Groq `whisper-large-v3-turbo`
-- **Briefing/summarization:** Gemini `gemini-1.5-flash`
+- **Briefing/summarization:** Groq `llama-3.1-8b-instant` (chosen for its higher free-tier rate limits)
 
 ---
 

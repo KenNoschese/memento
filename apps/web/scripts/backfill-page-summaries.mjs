@@ -14,7 +14,7 @@ if (!supabaseUrl || !supabaseKey || !geminiApiKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey)
 const genAI = new GoogleGenerativeAI(geminiApiKey)
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" })
 
 async function generateSummary(memory) {
   const title = memory.title?.trim() || "Untitled"
