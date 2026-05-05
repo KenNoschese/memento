@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Groq } from "groq-sdk";
 import { getErrorMessage } from "@/app/lib/errors";
+import { generatePageSummary } from "@/app/lib/page-summaries";
 import { buildMemoryDedupeKey, canonicalizeUrl, isUniqueViolation } from "@/app/lib/memories";
 import { ensurePageMemoryAttachment } from "@/app/lib/page-memories";
 
@@ -121,6 +122,18 @@ export async function POST(req: Request) {
     const embedding = embeddingResult.embedding.values;
     console.log("API Voice: Embedding size:", embedding.length);
 
+    let tags: string[] = [];
+    try {
+      const summaryResult = await generatePageSummary({
+        url,
+        title: "Voice Note",
+        content: text,
+      });
+      tags = summaryResult.tags;
+    } catch (tagError: unknown) {
+      console.warn("API Voice: Tag generation failed:", getErrorMessage(tagError));
+    }
+
     console.log("API Voice: Inserting into Supabase...");
     const { error: dbError } = await supabase.from("memories").insert([
       {
@@ -134,6 +147,7 @@ export async function POST(req: Request) {
         parent_memory_id: pageMemory.id,
         is_placeholder: false,
         dedupe_key: dedupeKey,
+        tags,
       },
     ]);
 

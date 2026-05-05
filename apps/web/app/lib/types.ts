@@ -7,6 +7,8 @@ export type BaseMemoryRecord = {
   title: string | null;
   content: string | null;
   summary?: string | null;
+  tags?: string[] | null;
+  folder_id?: string | null;
   created_at: string;
   embedding?: number[] | string | null;
   similarity?: number | null;
@@ -14,6 +16,12 @@ export type BaseMemoryRecord = {
   audio?: string | null;
   parent_memory_id?: string | null;
   is_placeholder?: boolean;
+};
+
+export type Folder = {
+  id: string;
+  name: string;
+  created_at: string;
 };
 
 export type VoiceNoteRecord = BaseMemoryRecord & {

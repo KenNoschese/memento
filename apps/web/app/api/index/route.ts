@@ -88,12 +88,15 @@ export async function POST(req: Request) {
     }
 
     let summary: string | null = null;
+    let tags: string[] = [];
     try {
-      summary = await generatePageSummary({
+      const summaryResult = await generatePageSummary({
         url,
         title,
         content: normalizedContent,
       });
+      summary = summaryResult.summary;
+      tags = summaryResult.tags;
     } catch (summaryError: unknown) {
       console.warn(
         "API: Page summary generation failed:",
@@ -107,6 +110,7 @@ export async function POST(req: Request) {
       title,
       content: normalizedContent,
       summary,
+      tags,
       embedding,
       type: "page" as const,
       dedupe_key: dedupeKey,

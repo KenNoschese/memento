@@ -13,7 +13,7 @@ const supabase = createClient(
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Allow-Private-Network": "true",
 };
@@ -61,7 +61,7 @@ export async function GET() {
   try {
     const { data: pageData, error: pageError } = await supabase
       .from("memories")
-      .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
       .eq("type", "page")
       .order("created_at", { ascending: false })
       .limit(100);
@@ -75,7 +75,7 @@ export async function GET() {
     const { data: voiceData, error: voiceError } = pageIds.length
       ? await supabase
           .from("memories")
-          .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+          .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
           .eq("type", "voice_note")
           .in("parent_memory_id", pageIds)
           .order("created_at", { ascending: false })
@@ -113,6 +113,36 @@ export async function GET() {
     }));
 
     return NextResponse.json({ memories }, { headers: corsHeaders });
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    return NextResponse.json(
+      { error: message },
+      { status: 500, headers: corsHeaders },
+    );
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const { id, folder_id } = await req.json();
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Memory id is required" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const { error } = await supabase
+      .from("memories")
+      .update({ folder_id: folder_id || null })
+      .eq("id", id);
+
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json({ success: true }, { headers: corsHeaders });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
     return NextResponse.json(
