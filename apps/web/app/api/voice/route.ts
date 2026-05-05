@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Groq } from "groq-sdk";
 import { getErrorMessage } from "@/app/lib/errors";
+import { buildMemoryDedupeKey, isUniqueViolation } from "@/app/lib/memories";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -55,6 +56,31 @@ export async function POST(req: Request) {
         { status: 200, headers: corsHeaders },
       );
 
+    const dedupeKey = buildMemoryDedupeKey({
+      type: "voice_note",
+      url,
+      title: "Voice Note",
+      content: text,
+    });
+
+    const { data: existing, error: checkError } = await supabase
+      .from("memories")
+      .select("id")
+      .eq("dedupe_key", dedupeKey)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error("API Voice: Duplicate check error:", checkError.message);
+    }
+
+    if (existing) {
+      console.log("API Voice: Exact memory already indexed. Skipping.");
+      return NextResponse.json(
+        { message: "Duplicate content skipped", transcript: text },
+        { status: 200, headers: corsHeaders },
+      );
+    }
+
     console.log("API Voice: Generating embedding...");
     const embeddingResult = await embeddingModel.embedContent(text);
     const embedding = embeddingResult.embedding.values;
@@ -67,10 +93,20 @@ export async function POST(req: Request) {
         title: "Voice Note",
         content: text,
         embedding,
+        type: "voice_note",
+        dedupe_key: dedupeKey,
       },
     ]);
 
     if (dbError) {
+      if (isUniqueViolation(dbError)) {
+        console.log("API Voice: Duplicate insert raced with an existing row. Skipping.");
+        return NextResponse.json(
+          { message: "Duplicate content skipped", transcript: text },
+          { status: 200, headers: corsHeaders },
+        );
+      }
+
       console.error(
         "API Voice: Supabase primary insert error:",
         dbError.message,
@@ -78,30 +114,7 @@ export async function POST(req: Request) {
         dbError.code,
         ")",
       );
-      // PGRST204 means column not found in schema cache
-      if (
-        dbError.code === "PGRST204" ||
-        dbError.message.includes('column "type" does not exist')
-      ) {
-        console.log("API Voice: Retrying insert without 'type' column...");
-        const { error: retryError } = await supabase.from("memories").insert([
-          {
-            url,
-            title: "Voice Note",
-            content: text,
-            embedding,
-          },
-        ]);
-        if (retryError) {
-          console.error(
-            "API Voice: Supabase retry insert error:",
-            retryError.message,
-          );
-          throw retryError;
-        }
-      } else {
-        throw dbError;
-      }
+      throw dbError;
     }
 
     console.log("API Voice: Successfully saved!");

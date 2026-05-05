@@ -1,6 +1,8 @@
 -- Enable pgvector if not already enabled
 create extension if not exists vector;
 
+drop function if exists match_memories(vector(768), double precision, integer);
+
 -- Create the match_memories function for semantic search
 create or replace function match_memories (
   query_embedding vector(768),
@@ -13,6 +15,7 @@ returns table (
   title text,
   content text,
   embedding vector(768),
+  type memory_type,
   similarity float
 )
 language plpgsql
@@ -25,6 +28,7 @@ begin
     memories.title,
     memories.content,
     memories.embedding,
+    memories.type,
     1 - (memories.embedding <=> query_embedding) as similarity
   from memories
   where 1 - (memories.embedding <=> query_embedding) > match_threshold

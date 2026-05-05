@@ -1,3 +1,5 @@
+export type MemoryType = "page" | "voice_note";
+
 export type MemoryRecord = {
   id: string;
   url: string;
@@ -6,7 +8,7 @@ export type MemoryRecord = {
   created_at: string;
   embedding?: number[] | string | null;
   similarity?: number | null;
-  type?: string | null;
+  type: MemoryType;
 };
 
 export type SearchRequest = {

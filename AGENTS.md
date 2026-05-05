@@ -188,12 +188,16 @@ Main files:
 
 ### Current Working Assumptions
 - The active search RPC expects **768-dimensional embeddings**.
+- Memory records persist a real `type` enum with values `page` and `voice_note`.
+- Memory writes persist a dedupe key and are expected to be idempotent for exact retries.
 - The repo contains `supabase/rpc_match_memories.sql` as the current semantic search function.
 - Memory records currently rely on:
   - `url`
   - `title`
   - `content`
   - `embedding`
+  - `type`
+  - `dedupe_key`
   - `created_at`
 
 ### Important Guidance

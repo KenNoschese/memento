@@ -20,7 +20,7 @@ type MemoriesResponse = {
 };
 
 function isVoiceNote(memory: MemoryRecord): boolean {
-  return memory.type === "voice_note" || memory.title === "Voice Note";
+  return memory.type === "voice_note";
 }
 
 function formatTimestamp(value: string): string {

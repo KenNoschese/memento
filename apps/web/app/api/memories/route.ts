@@ -59,7 +59,7 @@ export async function GET() {
     console.log("Memories API: Fetching all memories...");
     const { data, error } = await supabase
       .from("memories")
-      .select("id, url, title, content, created_at, embedding")
+      .select("id, url, title, content, created_at, embedding, type")
       .order("created_at", { ascending: false })
       .limit(100);
 
