@@ -37,13 +37,14 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log("Search API: Generating embedding for query:", query);
+    console.log("Search API: Generating 3072-dim embedding for query:", query);
 
     // 1. Generate embedding for the search query
     let embedding: number[];
     try {
       const result = await model.embedContent(query);
       embedding = result.embedding.values;
+      console.log("Search API: Embedding generated. Size:", embedding.length);
     } catch (geminiError: unknown) {
       const message = getErrorMessage(geminiError);
       console.error("Search API: Gemini Embedding Error:", message);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import {
   Brain,
   ExternalLink,
@@ -8,6 +9,7 @@ import {
   Mic,
   Play,
   Search,
+  Trash2,
 } from "lucide-react";
 import type {
   BriefingResponse,
@@ -38,6 +40,7 @@ export default function Dashboard() {
   const [isLoadingBriefing, setIsLoadingBriefing] = useState(true);
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
+  const [deletingMemoryId, setDeletingMemoryId] = useState<string | null>(null);
 
   const selectedMemory = useMemo(
     () => memories.find((memory) => memory.id === selectedMemoryId) ?? null,
@@ -47,9 +50,11 @@ export default function Dashboard() {
   const fetchBriefing = useCallback(async () => {
     try {
       const response = await fetch("/api/briefing");
-      const data = (await response.json()) as
-        | BriefingResponse
-        | { error: string };
+      const text = await response.text();
+      if (!text) {
+        throw new Error("Empty response from briefing API");
+      }
+      const data = JSON.parse(text) as BriefingResponse | { error: string };
 
       if (!response.ok || "error" in data) {
         throw new Error(
@@ -93,7 +98,7 @@ export default function Dashboard() {
   }, []);
 
   const handleSearch = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
+    async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
 
       const normalizedQuery = searchQuery.trim();
@@ -117,7 +122,7 @@ export default function Dashboard() {
           throw new Error("error" in data ? data.error : "Search failed");
         }
 
-        const matchIds = data.matches.map((match) => match.id);
+        const matchIds = data.matches.map((match: MemoryRecord) => match.id);
         setHighlightedIds(matchIds);
         if (matchIds[0]) {
           setSelectedMemoryId(matchIds[0]);
@@ -131,6 +136,53 @@ export default function Dashboard() {
     [searchQuery],
   );
 
+  const handleDeleteMemory = useCallback(async (memory: MemoryRecord) => {
+    const label = memory.title?.trim() || "Untitled";
+    const confirmed = window.confirm(`Delete "${label}" from your memories?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingMemoryId(memory.id);
+
+    try {
+      const response = await fetch("/api/memories", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memory.id }),
+      });
+      const data = (await response.json()) as
+        | { success: boolean }
+        | { error: string };
+
+      if (!response.ok || "error" in data) {
+        throw new Error("error" in data ? data.error : "Delete failed");
+      }
+
+      setMemories((current) => {
+        const next = current.filter((item) => item.id !== memory.id);
+
+        setSelectedMemoryId((currentId) => {
+          if (currentId !== memory.id) {
+            return currentId;
+          }
+
+          return next[0]?.id ?? null;
+        });
+
+        return next;
+      });
+
+      setHighlightedIds((current) => current.filter((id) => id !== memory.id));
+    } catch (error) {
+      console.error("Delete failed:", error);
+      window.alert("Unable to delete this memory right now.");
+    } finally {
+      setDeletingMemoryId(null);
+    }
+  }, []);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       void fetchBriefing();
@@ -142,7 +194,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen min-h-screen w-full bg-white text-zinc-900">
-      <aside className="flex w-[360px] shrink-0 flex-col border-r border-zinc-200 bg-zinc-50">
+      <aside className="flex w-90 shrink-0 flex-col border-r border-zinc-200 bg-zinc-50">
         <div className="border-b border-zinc-200 bg-white px-5 py-5">
           <div className="mb-2 flex items-center gap-2">
             <Brain size={18} />
@@ -218,14 +270,22 @@ export default function Dashboard() {
             {memories.map((memory) => {
               const selected = memory.id === selectedMemoryId;
               const highlighted =
-                highlightedIds.length === 0 || highlightedIds.includes(memory.id);
+                highlightedIds.length === 0 ||
+                highlightedIds.includes(memory.id);
 
               return (
-                <button
+                <div
                   key={memory.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedMemoryId(memory.id)}
-                  className={`flex w-full flex-col items-start gap-2 rounded-md px-3 py-3 text-left transition ${
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedMemoryId(memory.id);
+                    }
+                  }}
+                  className={`group flex w-full flex-col items-start gap-2 rounded-md px-3 py-3 text-left transition ${
                     selected
                       ? "bg-zinc-900 text-white"
                       : "bg-transparent hover:bg-zinc-100"
@@ -235,7 +295,32 @@ export default function Dashboard() {
                     <span className="truncate text-sm font-medium">
                       {memory.title?.trim() || "Untitled"}
                     </span>
-                    {isVoiceNote(memory) ? <Mic size={14} /> : null}
+                    <div className="flex items-center gap-2">
+                      {isVoiceNote(memory) ? <Mic size={14} /> : null}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDeleteMemory(memory);
+                        }}
+                        aria-label={`Delete ${memory.title?.trim() || "memory"}`}
+                        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition ${
+                          selected
+                            ? "border-white/10 text-zinc-300 hover:border-white/20 hover:bg-white/8 hover:text-white"
+                            : "border-transparent text-zinc-400 opacity-0 hover:border-zinc-200 hover:bg-white hover:text-zinc-700 group-hover:opacity-100"
+                        } ${
+                          deletingMemoryId === memory.id
+                            ? "pointer-events-none opacity-100"
+                            : ""
+                        }`}
+                      >
+                        {deletingMemoryId === memory.id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   <span
@@ -253,7 +338,7 @@ export default function Dashboard() {
                   >
                     {formatTimestamp(memory.created_at)}
                   </span>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -294,15 +379,51 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {isVoiceNote(selectedMemory) ? (
+              <div className="flex shrink-0 items-center gap-2">
+                {isVoiceNote(selectedMemory) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedMemory.audio) {
+                        const audio = new Audio(selectedMemory.audio);
+                        audio.play().catch((err) => {
+                          console.error("Playback failed:", err);
+                          // Fallback to TTS if audio fails
+                          window.speechSynthesis.cancel();
+                          const utterance = new SpeechSynthesisUtterance(
+                            selectedMemory.content || "",
+                          );
+                          window.speechSynthesis.speak(utterance);
+                        });
+                      } else if (selectedMemory.content) {
+                        window.speechSynthesis.cancel();
+                        const utterance = new SpeechSynthesisUtterance(
+                          selectedMemory.content,
+                        );
+                        window.speechSynthesis.speak(utterance);
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 hover:border-red-300 cursor-pointer"
+                  >
+                    <Play size={15} fill="currentColor" />
+                    {selectedMemory.audio ? "Play Recording" : "Play (TTS)"}
+                  </button>
+                ) : null}
+
                 <button
                   type="button"
-                  className="inline-flex shrink-0 items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
+                  onClick={() => void handleDeleteMemory(selectedMemory)}
+                  disabled={deletingMemoryId === selectedMemory.id}
+                  className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Play size={15} fill="currentColor" />
-                  Transcript
+                  {deletingMemoryId === selectedMemory.id ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Trash2 size={15} />
+                  )}
+                  Delete
                 </button>
-              ) : null}
+              </div>
             </div>
 
             <article className="prose prose-zinc max-w-none">

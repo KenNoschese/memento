@@ -10,7 +10,6 @@ const supabase = createClient(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-// Use gemini-embedding-001 which is confirmed to be available for this API key
 const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
 const corsHeaders = {
@@ -36,18 +35,25 @@ export async function POST(req: Request) {
       title,
       content,
     });
-    
+
     if (!process.env.GEMINI_API_KEY) {
-      console.error("API: GEMINI_API_KEY is missing from environment variables.");
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500, headers: corsHeaders });
+      console.error(
+        "API: GEMINI_API_KEY is missing from environment variables.",
+      );
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500, headers: corsHeaders },
+      );
     }
 
     if (!content) {
       console.warn("API: Received empty content for URL:", url);
-      return NextResponse.json({ message: "Empty content ignored" }, { status: 200, headers: corsHeaders });
+      return NextResponse.json(
+        { message: "Empty content ignored" },
+        { status: 200, headers: corsHeaders },
+      );
     }
 
-    console.log("API: Checking for duplicates for:", url);
     const { data: existing, error: checkError } = await supabase
       .from("memories")
       .select("id")
@@ -59,31 +65,30 @@ export async function POST(req: Request) {
     }
 
     if (existing) {
-      console.log("API: Exact memory already indexed. Skipping.");
-      return NextResponse.json({ message: "Duplicate content skipped" }, { status: 200, headers: corsHeaders });
+      return NextResponse.json(
+        { message: "Duplicate content skipped" },
+        { status: 200, headers: corsHeaders },
+      );
     }
 
-    console.log("API: Generating embedding for:", url);
-
-    // Generate embedding using Gemini
     let embedding: number[];
     try {
-      const result = await model.embedContent(content.substring(0, 30000)); // Truncate to avoid API limits
+      console.log("API: Generating 3072-dim embedding with gemini-embedding-001...");
+      const result = await model.embedContent(content.substring(0, 30000));
       embedding = result.embedding.values;
+      console.log("API: Embedding generated. Size:", embedding.length);
     } catch (geminiError: unknown) {
       const message = getErrorMessage(geminiError);
       console.error("API: Gemini Embedding Error:", message);
       throw new Error(`Gemini failed: ${message}`);
     }
 
-    console.log("API: Inserting into Supabase...");
-    const { error: dbError } = await supabase
-      .from("memories")
-      .insert([{ url, title, content, embedding, type: "page", dedupe_key: dedupeKey }]);
+    const { error: dbError } = await supabase.from("memories").insert([
+      { url, title, content, embedding, type: "page", dedupe_key: dedupeKey },
+    ]);
 
     if (dbError) {
       if (isUniqueViolation(dbError)) {
-        console.log("API: Duplicate insert raced with an existing row. Skipping.");
         return NextResponse.json(
           { message: "Duplicate content skipped" },
           { status: 200, headers: corsHeaders },
@@ -94,7 +99,6 @@ export async function POST(req: Request) {
       throw dbError;
     }
 
-    console.log("API: Successfully saved!");
     return NextResponse.json({ message: "Saved!" }, { headers: corsHeaders });
   } catch (error: unknown) {
     const message = getErrorMessage(error);

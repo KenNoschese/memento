@@ -10,7 +10,7 @@ const supabase = createClient(
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Allow-Private-Network": "true",
 };
@@ -56,15 +56,13 @@ export async function OPTIONS() {
 
 export async function GET() {
   try {
-    console.log("Memories API: Fetching all memories...");
     const { data, error } = await supabase
       .from("memories")
-      .select("id, url, title, content, created_at, embedding, type")
+      .select("id, url, title, content, created_at, embedding, type, audio")
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (error) {
-      console.error("Memories API Error:", error.message);
       throw error;
     }
 
@@ -76,7 +74,33 @@ export async function GET() {
     return NextResponse.json({ memories }, { headers: corsHeaders });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
-    console.error("Memories API Fatal Error:", message);
+    return NextResponse.json(
+      { error: message },
+      { status: 500, headers: corsHeaders },
+    );
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { id } = (await req.json()) as { id?: string };
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Memory id is required" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const { error } = await supabase.from("memories").delete().eq("id", id);
+
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json({ success: true }, { headers: corsHeaders });
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
     return NextResponse.json(
       { error: message },
       { status: 500, headers: corsHeaders },

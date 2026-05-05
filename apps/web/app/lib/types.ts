@@ -9,6 +9,7 @@ export type MemoryRecord = {
   embedding?: number[] | string | null;
   similarity?: number | null;
   type: MemoryType;
+  audio?: string | null;
 };
 
 export type SearchRequest = {

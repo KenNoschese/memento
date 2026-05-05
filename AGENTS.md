@@ -141,7 +141,7 @@ Main files:
 - `apps/web/app/api/index/route.ts`
 
 ### Voice Note Flow
-1. The extension background worker listens for the voice shortcut and popup actions.
+1. The extension background worker listens for explicit start/stop voice shortcuts and popup actions.
 2. It creates or reuses an offscreen document.
 3. The offscreen page records microphone audio.
 4. The offscreen page uploads the recording plus active tab URL to `apps/web/app/api/voice/route.ts`.
@@ -187,15 +187,16 @@ Main files:
 ## Database Notes
 
 ### Current Working Assumptions
-- The active search RPC expects **768-dimensional embeddings**.
+- The active search RPC expects **3072-dimensional embeddings** (Gemini `gemini-embedding-001` default).
 - Memory records persist a real `type` enum with values `page` and `voice_note`.
 - Memory writes persist a dedupe key and are expected to be idempotent for exact retries.
-- The repo contains `supabase/rpc_match_memories.sql` as the current semantic search function.
+- The repo contains `supabase/migrate_memories_contract.sql` as the current authoritative schema.
 - Memory records currently rely on:
   - `url`
   - `title`
   - `content`
-  - `embedding`
+  - `audio` (Base64 string for voice notes)
+  - `embedding` (vector(3072))
   - `type`
   - `dedupe_key`
   - `created_at`
@@ -218,7 +219,7 @@ These are current repo realities and should influence design decisions:
   - extension network calls are still pinned to local dev URLs
 
 - **Shortcut/product mismatch risk**
-  - shortcut behavior and documented shortcut expectations must stay aligned
+  - explicit start/stop shortcut behavior and documented shortcut expectations must stay aligned
 
 If you fix one of these, update this section.
 
@@ -303,6 +304,7 @@ When reviewing changes in this repo, prioritize:
 
 ## File Map for Common Tasks
 - **Page indexing:** `apps/extension/contents/indexer.ts`, `apps/web/app/api/index/route.ts`
+- **Voice capture:** `apps/extension/background/index.ts`, `apps/extension/tabs/offscreen.tsx`, `apps/web/app/api/voice/route.ts`
 - **Voice capture:** `apps/extension/background/index.ts`, `apps/extension/tabs/offscreen.tsx`, `apps/web/app/api/voice/route.ts`
 - **Dashboard memory browser:** `apps/web/app/page.tsx`, `apps/web/app/api/memories/route.ts`
 - **Briefing:** `apps/web/app/api/briefing/route.ts`

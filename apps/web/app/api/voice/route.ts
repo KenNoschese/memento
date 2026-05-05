@@ -29,32 +29,60 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
+    console.log("API Voice: Request received");
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File;
     const url = formData.get("url") as string;
 
-    console.log("API Voice: Received request for URL:", url);
-    if (!audioFile) console.error("API Voice: No audio file in request");
-
-    if (!audioFile || !url)
+    if (!audioFile || !url) {
+      console.error("API Voice: Missing audio or URL");
       return NextResponse.json(
         { error: "Missing data" },
         { status: 400, headers: corsHeaders },
       );
+    }
 
-    console.log("API Voice: Sending to Groq Whisper...");
+    if (audioFile.size < 2000) {
+      console.log(`API Voice: Audio file too small (${audioFile.size} bytes), likely silence. Skipping.`);
+      return NextResponse.json(
+        { message: "Audio too short or silent", transcript: "" },
+        { status: 200, headers: corsHeaders },
+      );
+    }
+
+    // Convert audio to Base64 for storage
+    console.log("API Voice: Converting audio to Base64...");
+    const bytes = await audioFile.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const audioB64 = `data:${audioFile.type};base64,${buffer.toString("base64")}`;
+
+    console.log(`API Voice: Transcribing audio (${audioFile.size} bytes)...`);
     const transcription = await groq.audio.transcriptions.create({
       file: audioFile,
       model: "whisper-large-v3-turbo",
+      temperature: 0,
+      prompt: "Voice note.",
     });
 
-    const text = transcription.text;
-    console.log("API Voice: Transcribed text:", text);
-    if (!text)
+    const text = transcription.text?.trim() || "";
+    console.log("API Voice: Transcript received:", text);
+
+    // Filter Whisper hallucinations
+    if (/^(thank you\.?|thanks for watching\.?|thanks\.?|you\.?|th\.?)$/i.test(text)) {
+      console.log("API Voice: Hallucination detected and filtered.");
+      return NextResponse.json(
+        { message: "Empty transcript", transcript: "" },
+        { status: 200, headers: corsHeaders },
+      );
+    }
+    
+    if (!text) {
+      console.log("API Voice: Text is empty, skipping save.");
       return NextResponse.json(
         { message: "Empty transcript" },
         { status: 200, headers: corsHeaders },
       );
+    }
 
     const dedupeKey = buildMemoryDedupeKey({
       type: "voice_note",
@@ -74,24 +102,25 @@ export async function POST(req: Request) {
     }
 
     if (existing) {
-      console.log("API Voice: Exact memory already indexed. Skipping.");
+      console.log("API Voice: Duplicate found, skipping save.");
       return NextResponse.json(
         { message: "Duplicate content skipped", transcript: text },
         { status: 200, headers: corsHeaders },
       );
     }
 
-    console.log("API Voice: Generating embedding...");
+    console.log("API Voice: Generating 3072-dim embedding...");
     const embeddingResult = await embeddingModel.embedContent(text);
     const embedding = embeddingResult.embedding.values;
-    console.log("API Voice: Embedding generated (dims:", embedding.length, ")");
+    console.log("API Voice: Embedding size:", embedding.length);
 
-    console.log("API Voice: Saving to Supabase...");
+    console.log("API Voice: Inserting into Supabase...");
     const { error: dbError } = await supabase.from("memories").insert([
       {
         url,
         title: "Voice Note",
         content: text,
+        audio: audioB64,
         embedding,
         type: "voice_note",
         dedupe_key: dedupeKey,
@@ -99,21 +128,14 @@ export async function POST(req: Request) {
     ]);
 
     if (dbError) {
+      console.error("API Voice: Supabase Error:", dbError.message, dbError.code);
       if (isUniqueViolation(dbError)) {
-        console.log("API Voice: Duplicate insert raced with an existing row. Skipping.");
         return NextResponse.json(
           { message: "Duplicate content skipped", transcript: text },
           { status: 200, headers: corsHeaders },
         );
       }
 
-      console.error(
-        "API Voice: Supabase primary insert error:",
-        dbError.message,
-        "(Code:",
-        dbError.code,
-        ")",
-      );
       throw dbError;
     }
 
