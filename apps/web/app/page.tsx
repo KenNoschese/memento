@@ -381,6 +381,7 @@ export default function Dashboard() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
@@ -677,10 +678,10 @@ export default function Dashboard() {
   }, [isResizingSidebar]);
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <div className="flex min-h-screen flex-col lg:flex-row">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] lg:h-screen lg:overflow-hidden">
+      <div className="flex min-h-screen flex-col lg:h-screen lg:flex-row">
         <aside
-          className="relative w-full shrink-0 border-b border-[var(--line)] bg-[var(--surface-soft)] lg:min-h-screen lg:w-[var(--sidebar-width)] lg:border-b-0 lg:border-r"
+          className="relative w-full shrink-0 border-b border-[var(--line)] bg-[var(--surface-soft)] lg:h-screen lg:w-[var(--sidebar-width)] lg:border-b-0 lg:border-r"
           style={{ ["--sidebar-width" as string]: `${resolvedSidebarWidth}px` }}
         >
           <div
@@ -830,34 +831,48 @@ export default function Dashboard() {
                   </section>
 
                   <section>
-                    <div className="mb-3 px-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsSignalsExpanded((current) => !current)}
+                      className="flex w-full items-center justify-between gap-3 px-1 text-left"
+                    >
                       <SectionLabel icon={<Tag size={13} />}>Signals</SectionLabel>
-                    </div>
-                    <div className="flex flex-wrap gap-2 px-1">
-                      {allTags.length > 0 ? (
-                        allTags.map((tag) => (
-                          <button
-                            type="button"
-                            key={tag}
-                            onClick={() => {
-                              setSelectedTag(selectedTag === tag ? null : tag);
-                              setSelectedFolderId(null);
-                            }}
-                            className={`rounded-full border px-3 py-1.5 text-xs transition ${
-                              selectedTag === tag
-                                ? "border-[var(--accent-edge)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                                : "border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-edge)] hover:text-[var(--foreground)]"
-                            }`}
-                          >
-                            {tag}
-                          </button>
-                        ))
-                      ) : (
-                        <span className="px-1 text-sm text-[var(--muted)]">
-                          No tags generated yet.
-                        </span>
-                      )}
-                    </div>
+                      <ChevronDown
+                        size={15}
+                        className={`text-[var(--muted)] transition ${
+                          isSignalsExpanded ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    {isSignalsExpanded ? (
+                      <div className="mt-3 px-1">
+                        <div className="flex flex-wrap gap-2">
+                          {allTags.length > 0 ? (
+                            allTags.map((tag) => (
+                              <button
+                                type="button"
+                                key={tag}
+                                onClick={() => {
+                                  setSelectedTag(selectedTag === tag ? null : tag);
+                                  setSelectedFolderId(null);
+                                }}
+                                className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                                  selectedTag === tag
+                                    ? "border-[var(--accent-edge)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                                    : "border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-edge)] hover:text-[var(--foreground)]"
+                                }`}
+                              >
+                                {tag}
+                              </button>
+                            ))
+                          ) : (
+                            <span className="px-1 text-sm text-[var(--muted)]">
+                              No tags generated yet.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
                   </section>
 
                   <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -871,7 +886,10 @@ export default function Dashboard() {
                           : `${filteredMemories.length} total`}
                       </span>
                     </div>
-                    <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
+                    <div
+                      className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--line)] hover:[&::-webkit-scrollbar-thumb]:bg-[var(--muted)]"
+                      style={{ scrollbarColor: "var(--line) transparent" }}
+                    >
                       {filteredMemories.map((memory) => {
                         const selected = memory.id === selectedMemoryId;
                         const highlighted =
@@ -936,7 +954,7 @@ export default function Dashboard() {
           ) : null}
         </aside>
 
-        <main className="min-w-0 flex-1">
+        <main className="min-w-0 flex-1 lg:h-screen lg:overflow-y-auto">
           {selectedMemory ? (
             <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
               <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-sm">

@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f3f5f8;
-  --foreground: #0f172a;
-  --foreground-soft: #334155;
-  --surface: #ffffff;
-  --surface-soft: #f8fafc;
-  --surface-strong: #eef4ff;
-  --line: #dbe3ef;
-  --muted: #64748b;
-  --muted-strong: #475569;
-  --accent: #2563eb;
-  --accent-strong: #1d4ed8;
-  --accent-soft: #eff6ff;
-  --accent-edge: #bfdbfe;
+  --background: #f5f1eb;
+  --foreground: #26211c;
+  --foreground-soft: #4a433c;
+  --surface: #fffdfa;
+  --surface-soft: #faf6f0;
+  --surface-strong: #f4ece2;
+  --line: #e7ddd1;
+  --muted: #86786b;
+  --muted-strong: #665b50;
+  --accent: #8f6440;
+  --accent-strong: #765136;
+  --accent-soft: #f3e9de;
+  --accent-edge: #d7bea6;
 }
 
 @theme inline {
@@ -36,7 +36,7 @@ body {
 }
 
 ::selection {
-  background: rgba(37, 99, 235, 0.18);
+  background: rgba(143, 100, 64, 0.16);
 }
 
 button,
