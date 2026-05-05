@@ -73,8 +73,9 @@ export async function POST(req: Request) {
 
     console.log("API Voice: Successfully saved!");
     return NextResponse.json({ message: "Saved!", transcript: text }, { headers: corsHeaders });
-  } catch (error: any) {
-    console.error("API Voice: Fatal error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("API Voice: Fatal error:", message);
+    return NextResponse.json({ error: message }, { status: 500, headers: corsHeaders });
   }
 }

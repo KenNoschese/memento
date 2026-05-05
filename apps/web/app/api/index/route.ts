@@ -46,9 +46,11 @@ export async function POST(req: Request) {
     try {
       const result = await model.embedContent(content.substring(0, 30000)); // Truncate to avoid API limits
       embedding = result.embedding.values;
-    } catch (geminiError: any) {
-      console.error("API: Gemini Embedding Error:", geminiError.message);
-      throw new Error(`Gemini failed: ${geminiError.message}`);
+    } catch (geminiError: unknown) {
+      const message =
+        geminiError instanceof Error ? geminiError.message : "Unknown error";
+      console.error("API: Gemini Embedding Error:", message);
+      throw new Error(`Gemini failed: ${message}`);
     }
 
     console.log("API: Inserting into Supabase...");
@@ -63,10 +65,11 @@ export async function POST(req: Request) {
 
     console.log("API: Successfully saved!");
     return NextResponse.json({ message: "Saved!" }, { headers: corsHeaders });
-  } catch (error: any) {
-    console.error("API: Final Catch Error:", error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("API: Final Catch Error:", message);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: message || "Internal Server Error" },
       { status: 500, headers: corsHeaders },
     );
   }
