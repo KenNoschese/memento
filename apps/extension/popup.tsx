@@ -1,6 +1,22 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 function IndexPopup() {
+  const [isIndexingEnabled, setIsIndexingEnabled] = useState<boolean>(true)
+
+  useEffect(() => {
+    chrome.storage.local.get(["isIndexingEnabled"], (result) => {
+      if (result.isIndexingEnabled !== undefined) {
+        setIsIndexingEnabled(result.isIndexingEnabled)
+      }
+    })
+  }, [])
+
+  const toggleIndexing = () => {
+    const newState = !isIndexingEnabled
+    setIsIndexingEnabled(newState)
+    chrome.storage.local.set({ isIndexingEnabled: newState })
+  }
+
   return (
     <div
       style={{
@@ -22,18 +38,32 @@ function IndexPopup() {
       <div style={{ 
         display: "flex", 
         alignItems: "center", 
-        gap: "6px",
+        justifyContent: "space-between",
         marginBottom: "20px"
       }}>
-        <div style={{ 
-          width: "8px", 
-          height: "8px", 
-          backgroundColor: "#10b981", 
-          borderRadius: "50%" 
-        }} />
-        <span style={{ fontSize: "12px", color: "#666" }}>
-          Auto-indexing active
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ 
+            width: "8px", 
+            height: "8px", 
+            backgroundColor: isIndexingEnabled ? "#10b981" : "#d1d5db", 
+            borderRadius: "50%" 
+          }} />
+          <span style={{ fontSize: "12px", color: "#666" }}>
+            {isIndexingEnabled ? "Auto-indexing active" : "Indexing paused"}
+          </span>
+        </div>
+        <button 
+          onClick={toggleIndexing}
+          style={{
+            fontSize: "10px",
+            padding: "2px 6px",
+            borderRadius: "4px",
+            border: "1px solid #d1d5db",
+            backgroundColor: "#fff",
+            cursor: "pointer"
+          }}>
+          {isIndexingEnabled ? "Pause" : "Resume"}
+        </button>
       </div>
       
       <button
@@ -93,9 +123,30 @@ function IndexPopup() {
           cursor: "pointer",
           fontWeight: 600,
           fontSize: "13px",
-          transition: "opacity 0.2s"
+          marginBottom: "8px",
+          transition: "opacity 0.2s",
+          width: "100%"
         }}>
         View Memories
+      </button>
+
+      <button
+        onClick={() => {
+          chrome.runtime.openOptionsPage()
+        }}
+        style={{
+          backgroundColor: "#fff",
+          color: "#374151",
+          border: "1px solid #d1d5db",
+          padding: "10px 14px",
+          borderRadius: "6px",
+          cursor: "pointer",
+          fontWeight: 600,
+          fontSize: "13px",
+          transition: "background-color 0.2s",
+          width: "100%"
+        }}>
+        Settings
       </button>
       
       <p style={{ 

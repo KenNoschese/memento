@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getErrorMessage } from "@/app/lib/errors";
+import { buildMemoryDedupeKey, isUniqueViolation } from "@/app/lib/memories";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,7 +10,6 @@ const supabase = createClient(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-// Use gemini-embedding-001 which is confirmed to be available for this API key
 const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
 const corsHeaders = {
@@ -28,48 +29,80 @@ export async function OPTIONS() {
 export async function POST(req: Request) {
   try {
     const { url, title, content } = await req.json();
-    
+    const dedupeKey = buildMemoryDedupeKey({
+      type: "page",
+      url,
+      title,
+      content,
+    });
+
     if (!process.env.GEMINI_API_KEY) {
-      console.error("API: GEMINI_API_KEY is missing from environment variables.");
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500, headers: corsHeaders });
+      console.error(
+        "API: GEMINI_API_KEY is missing from environment variables.",
+      );
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500, headers: corsHeaders },
+      );
     }
 
     if (!content) {
       console.warn("API: Received empty content for URL:", url);
-      return NextResponse.json({ message: "Empty content ignored" }, { status: 200, headers: corsHeaders });
+      return NextResponse.json(
+        { message: "Empty content ignored" },
+        { status: 200, headers: corsHeaders },
+      );
     }
 
-    console.log("API: Generating embedding for:", url);
+    const { data: existing, error: checkError } = await supabase
+      .from("memories")
+      .select("id")
+      .eq("dedupe_key", dedupeKey)
+      .maybeSingle();
 
-    // Generate embedding using Gemini
-    let embedding;
+    if (checkError) {
+      console.error("API: Duplicate check error:", checkError.message);
+    }
+
+    if (existing) {
+      return NextResponse.json(
+        { message: "Duplicate content skipped" },
+        { status: 200, headers: corsHeaders },
+      );
+    }
+
+    let embedding: number[];
     try {
-      const result = await model.embedContent(content.substring(0, 30000)); // Truncate to avoid API limits
+      const result = await model.embedContent(content.substring(0, 30000));
       embedding = result.embedding.values;
     } catch (geminiError: unknown) {
-      const message =
-        geminiError instanceof Error ? geminiError.message : "Unknown error";
+      const message = getErrorMessage(geminiError);
       console.error("API: Gemini Embedding Error:", message);
       throw new Error(`Gemini failed: ${message}`);
     }
 
-    console.log("API: Inserting into Supabase...");
-    const { error: dbError } = await supabase
-      .from("memories")
-      .insert([{ url, title, content, embedding }]);
+    const { error: dbError } = await supabase.from("memories").insert([
+      { url, title, content, embedding, type: "page", dedupe_key: dedupeKey },
+    ]);
 
     if (dbError) {
+      if (isUniqueViolation(dbError)) {
+        return NextResponse.json(
+          { message: "Duplicate content skipped" },
+          { status: 200, headers: corsHeaders },
+        );
+      }
+
       console.error("API: Supabase Error:", dbError.message);
       throw dbError;
     }
 
-    console.log("API: Successfully saved!");
     return NextResponse.json({ message: "Saved!" }, { headers: corsHeaders });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = getErrorMessage(error);
     console.error("API: Final Catch Error:", message);
     return NextResponse.json(
-      { error: message || "Internal Server Error" },
+      { error: message },
       { status: 500, headers: corsHeaders },
     );
   }

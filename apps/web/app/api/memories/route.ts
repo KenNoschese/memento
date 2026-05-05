@@ -56,7 +56,6 @@ export async function OPTIONS() {
 
 export async function GET() {
   try {
-    console.log("Memories API: Fetching all memories...");
     const { data, error } = await supabase
       .from("memories")
       .select("id, url, title, content, created_at, embedding, type")
@@ -64,7 +63,6 @@ export async function GET() {
       .limit(100);
 
     if (error) {
-      console.error("Memories API Error:", error.message);
       throw error;
     }
 
@@ -76,7 +74,6 @@ export async function GET() {
     return NextResponse.json({ memories }, { headers: corsHeaders });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
-    console.error("Memories API Fatal Error:", message);
     return NextResponse.json(
       { error: message },
       { status: 500, headers: corsHeaders },
@@ -98,14 +95,12 @@ export async function DELETE(req: Request) {
     const { error } = await supabase.from("memories").delete().eq("id", id);
 
     if (error) {
-      console.error("Memories API Delete Error:", error.message);
       throw error;
     }
 
     return NextResponse.json({ success: true }, { headers: corsHeaders });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
-    console.error("Memories API Delete Fatal Error:", message);
     return NextResponse.json(
       { error: message },
       { status: 500, headers: corsHeaders },

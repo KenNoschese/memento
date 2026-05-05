@@ -211,7 +211,9 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm leading-6 text-zinc-600">{briefing.summary}</p>
+              <p className="text-sm leading-6 text-zinc-600">
+                {briefing.summary}
+              </p>
               {briefing.recentUrls.length > 0 ? (
                 <button
                   type="button"

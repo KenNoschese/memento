@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 import * as dotenv from "dotenv";
 import path from "path";
 
@@ -8,6 +9,12 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+function buildDedupeKey() {
+  return createHash("md5")
+    .update(["page", "test", "test", "test"].join("\n"))
+    .digest("hex");
+}
 
 async function checkSchema() {
   try {
@@ -19,7 +26,9 @@ async function checkSchema() {
             url: 'test', 
             title: 'test', 
             content: 'test', 
-            embedding: new Array(768).fill(0) 
+            embedding: new Array(768).fill(0),
+            type: 'page',
+            dedupe_key: buildDedupeKey(),
         }]);
         if (insertError) {
             console.error("Insert failed:", insertError.message);
