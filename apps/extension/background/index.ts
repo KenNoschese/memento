@@ -8,6 +8,33 @@ chrome.runtime.onInstalled.addListener(() => {
 
 let isRecording = false
 
+// URL blocking for privacy/stability: protocols and hosts we should never record
+const BLOCKED_PROTOCOLS = [
+  'chrome-extension:',
+  'file:',
+  'about:',
+  'data:'
+]
+
+const BLOCKED_HOSTS = [
+  'localhost'
+]
+
+const isUrlBlocked = (rawUrl?: string) => {
+  if (!rawUrl) return true
+  try {
+    const u = new URL(rawUrl)
+    if (BLOCKED_PROTOCOLS.includes(u.protocol)) return true
+    if (BLOCKED_HOSTS.includes(u.hostname)) return true
+    return false
+  } catch (e) {
+    // fallback to basic string checks
+    for (const p of BLOCKED_PROTOCOLS) if (rawUrl.startsWith(p)) return true
+    for (const h of BLOCKED_HOSTS) if (rawUrl.includes(h)) return true
+    return false
+  }
+}
+
 // Unified Message Listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "background") return
@@ -60,6 +87,14 @@ async function startRecording() {
       return
     }
 
+    // Additional blocked URL checks (chrome-extension://, file://, about:, data:, localhost)
+    if (isUrlBlocked(tab.url)) {
+      console.warn("Cannot record on blocked/unsupported URL:", tab.url)
+      chrome.action.setBadgeText({ text: "NA" })
+      setTimeout(() => chrome.action.setBadgeText({ text: "" }), 2000)
+      return
+    }
+
     await setupOffscreen()
     
     let attempts = 0
@@ -105,6 +140,9 @@ async function stopRecording() {
     chrome.action.setBadgeText({ text: "" })
   } catch (error) {
     console.error("Stop recording failed:", error)
+  } finally {
+    isRecording = false
+    chrome.action.setBadgeText({ text: "" })
   }
 }
 

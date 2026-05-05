@@ -1,4 +1,97 @@
 import { Readability } from "@mozilla/readability"
+import { getApiBaseUrl } from "../config"
+
+// Prevent duplicate indexing runs for the same page
+let isIndexed = false
+
+// SPA debounce (ms). Can be overridden by chrome.storage.local.spaDebounceMs
+let SPA_DEBOUNCE_MS = 2000
+
+// Helper: trigger indexing only if we haven't already
+const triggerIndexIfNotIndexed = async () => {
+  if (isIndexed) {
+    // Telemetry/logging: indexing suppressed because we already indexed this page
+    try {
+      console.debug('Memento: Index suppressed; already indexed', { url: window.location.href })
+      chrome.runtime.sendMessage?.({ type: 'telemetry', event: 'index_suppressed', url: window.location.href })
+    } catch (e) {
+      // best-effort, ignore
+    }
+    return
+  }
+  await extractAndSend()
+  isIndexed = true
+}
+
+// SPA support: emit a synthetic event when history changes (pushState/replaceState)
+const patchHistoryMethods = () => {
+  const _pushState = history.pushState
+  history.pushState = function (...args: any[]) {
+    const ret = _pushState.apply(this, args as any)
+    window.dispatchEvent(new Event('locationchange'))
+    return ret
+  }
+
+  const _replaceState = history.replaceState
+  history.replaceState = function (...args: any[]) {
+    const ret = _replaceState.apply(this, args as any)
+    window.dispatchEvent(new Event('locationchange'))
+    return ret
+  }
+}
+
+// Debounced handler to index when URL changes in SPAs
+let lastIndexedUrl = ''
+const handleLocationChange = () => {
+  const href = window.location.href
+  if (href === lastIndexedUrl) return
+  lastIndexedUrl = href
+  // give SPA content a moment to render
+  setTimeout(() => {
+    triggerIndexIfNotIndexed().catch((e) => console.error('SPA index failed', e))
+  }, SPA_DEBOUNCE_MS)
+}
+
+// Emergency index when user navigates away or hides the page
+const handleVisibilityOrUnload = () => {
+  if (isIndexed) return
+  try {
+    // best-effort immediate indexing
+    extractAndSend().catch(() => {})
+    isIndexed = true
+  } catch (e) {
+    // ignore
+  }
+}
+
+// Wire up SPA + emergency listeners
+const setupAdditionalIndexing = () => {
+  try {
+    // Attempt to read a custom debounce value from storage
+    try {
+      chrome.storage.local.get(['spaDebounceMs'], (res: any) => {
+        const v = Number(res?.spaDebounceMs)
+        if (!Number.isNaN(v) && v > 0) {
+          SPA_DEBOUNCE_MS = v
+          console.debug('Memento: SPA debounce set to', SPA_DEBOUNCE_MS)
+        }
+      })
+    } catch (e) {
+      // ignore storage read errors
+    }
+    patchHistoryMethods()
+    window.addEventListener('popstate', handleLocationChange)
+    window.addEventListener('locationchange', handleLocationChange)
+
+    // If the page becomes hidden or is about to unload, attempt an immediate index
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') handleVisibilityOrUnload()
+    })
+    window.addEventListener('beforeunload', handleVisibilityOrUnload)
+  } catch (e) {
+    console.warn('Memento: Failed to setup additional indexing listeners', e)
+  }
+}
 
 const extractAndSend = async () => {
   // 0. Check settings
@@ -38,7 +131,8 @@ const extractAndSend = async () => {
 
       // 2. Send to API (Communication to Next.js backend)
       try {
-        const response = await fetch("http://localhost:3000/api/index", {
+        const apiBaseUrl = await getApiBaseUrl()
+        const response = await fetch(`${apiBaseUrl}/api/index`, {
           method: "POST",
           headers: { 
             "Content-Type": "application/json"
@@ -71,3 +165,6 @@ window.addEventListener("load", () => {
   console.log("Memento: Content script loaded. Timer started (30s)...")
   setTimeout(extractAndSend, 30000)
 })
+
+// Additional indexing listeners to support SPAs and quick exits
+setupAdditionalIndexing()
