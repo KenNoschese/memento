@@ -50,9 +50,11 @@ export default function Dashboard() {
   const fetchBriefing = useCallback(async () => {
     try {
       const response = await fetch("/api/briefing");
-      const data = (await response.json()) as
-        | BriefingResponse
-        | { error: string };
+      const text = await response.text();
+      if (!text) {
+        throw new Error("Empty response from briefing API");
+      }
+      const data = JSON.parse(text) as BriefingResponse | { error: string };
 
       if (!response.ok || "error" in data) {
         throw new Error(
@@ -383,10 +385,26 @@ export default function Dashboard() {
                 {isVoiceNote(selectedMemory) ? (
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
+                    onClick={() => {
+                      if (selectedMemory.audio) {
+                        const audio = new Audio(selectedMemory.audio);
+                        audio.play().catch(err => {
+                          console.error("Playback failed:", err);
+                          // Fallback to TTS if audio fails
+                          window.speechSynthesis.cancel();
+                          const utterance = new SpeechSynthesisUtterance(selectedMemory.content || "");
+                          window.speechSynthesis.speak(utterance);
+                        });
+                      } else if (selectedMemory.content) {
+                        window.speechSynthesis.cancel();
+                        const utterance = new SpeechSynthesisUtterance(selectedMemory.content);
+                        window.speechSynthesis.speak(utterance);
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 hover:border-red-300 cursor-pointer"
                   >
                     <Play size={15} fill="currentColor" />
-                    Transcript
+                    {selectedMemory.audio ? "Play Recording" : "Play (TTS)"}
                   </button>
                 ) : null}
 

@@ -10,10 +10,15 @@ let SPA_DEBOUNCE_MS = 2000
 // Helper: trigger indexing only if we haven't already
 const triggerIndexIfNotIndexed = async () => {
   if (isIndexed) {
-    // Telemetry/logging: indexing suppressed because we already indexed this page
     try {
-      console.debug('Memento: Index suppressed; already indexed', { url: window.location.href })
-      chrome.runtime.sendMessage?.({ type: 'telemetry', event: 'index_suppressed', url: window.location.href })
+      console.debug("Memento: Index suppressed; already indexed", {
+        url: window.location.href
+      })
+      chrome.runtime.sendMessage?.({
+        type: "telemetry",
+        event: "index_suppressed",
+        url: window.location.href
+      })
     } catch (e) {
       // best-effort, ignore
     }
@@ -28,27 +33,27 @@ const patchHistoryMethods = () => {
   const _pushState = history.pushState
   history.pushState = function (...args: any[]) {
     const ret = _pushState.apply(this, args as any)
-    window.dispatchEvent(new Event('locationchange'))
+    window.dispatchEvent(new Event("locationchange"))
     return ret
   }
 
   const _replaceState = history.replaceState
   history.replaceState = function (...args: any[]) {
     const ret = _replaceState.apply(this, args as any)
-    window.dispatchEvent(new Event('locationchange'))
+    window.dispatchEvent(new Event("locationchange"))
     return ret
   }
 }
 
 // Debounced handler to index when URL changes in SPAs
-let lastIndexedUrl = ''
+let lastIndexedUrl = ""
 const handleLocationChange = () => {
   const href = window.location.href
   if (href === lastIndexedUrl) return
   lastIndexedUrl = href
   // give SPA content a moment to render
   setTimeout(() => {
-    triggerIndexIfNotIndexed().catch((e) => console.error('SPA index failed', e))
+    triggerIndexIfNotIndexed().catch((e) => console.error("SPA index failed", e))
   }, SPA_DEBOUNCE_MS)
 }
 
@@ -69,59 +74,67 @@ const setupAdditionalIndexing = () => {
   try {
     // Attempt to read a custom debounce value from storage
     try {
-      chrome.storage.local.get(['spaDebounceMs'], (res: any) => {
+      chrome.storage.local.get(["spaDebounceMs"], (res: any) => {
         const v = Number(res?.spaDebounceMs)
         if (!Number.isNaN(v) && v > 0) {
           SPA_DEBOUNCE_MS = v
-          console.debug('Memento: SPA debounce set to', SPA_DEBOUNCE_MS)
+          console.debug("Memento: SPA debounce set to", SPA_DEBOUNCE_MS)
         }
       })
     } catch (e) {
       // ignore storage read errors
     }
     patchHistoryMethods()
-    window.addEventListener('popstate', handleLocationChange)
-    window.addEventListener('locationchange', handleLocationChange)
+    window.addEventListener("popstate", handleLocationChange)
+    window.addEventListener("locationchange", handleLocationChange)
 
     // If the page becomes hidden or is about to unload, attempt an immediate index
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') handleVisibilityOrUnload()
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") handleVisibilityOrUnload()
     })
-    window.addEventListener('beforeunload', handleVisibilityOrUnload)
+    window.addEventListener("beforeunload", handleVisibilityOrUnload)
   } catch (e) {
-    console.warn('Memento: Failed to setup additional indexing listeners', e)
+    console.warn("Memento: Failed to setup additional indexing listeners", e)
   }
 }
 
 const extractAndSend = async () => {
-  // 0. Check settings
-  const settings = await chrome.storage.local.get(["isIndexingEnabled", "denylist"])
-  const isEnabled = settings.isIndexingEnabled !== false // default to true
-  const denylist = (settings.denylist as string[]) || ["localhost", "127.0.0.1"]
-
-  if (!isEnabled) {
-    console.log("Memento: Indexing is disabled. Skipping.")
+  // 0. Check settings and context
+  if (!chrome.runtime?.id) {
+    console.warn("Memento: Extension context invalidated.")
     return
   }
 
-  const currentUrl = window.location.href
-  const hostname = window.location.hostname
-
-  const isBlocked = denylist.some(pattern => 
-    hostname.includes(pattern) || currentUrl.includes(pattern)
-  )
-
-  if (isBlocked) {
-    console.log(`Memento: URL "${currentUrl}" matches denylist pattern. Skipping.`)
-    return
-  }
-
-  console.log("Memento: Starting extraction...")
-
-  // 1. Extract the "meat" of the page 
-  // We use document.cloneNode(true) but wrap it in defensive checks
-  // Some sites might have problematic DOM structures
   try {
+    const settings = await chrome.storage.local.get([
+      "isIndexingEnabled",
+      "denylist"
+    ])
+    const isEnabled = settings.isIndexingEnabled !== false // default to true
+    const denylist = (settings.denylist as string[]) || ["localhost", "127.0.0.1"]
+
+    if (!isEnabled) {
+      console.log("Memento: Indexing is disabled. Skipping.")
+      return
+    }
+
+    const currentUrl = window.location.href
+    const hostname = window.location.hostname
+
+    const isBlocked = denylist.some((pattern) =>
+      hostname.includes(pattern) || currentUrl.includes(pattern)
+    )
+
+    if (isBlocked) {
+      console.log(
+        `Memento: URL "${currentUrl}" matches denylist pattern. Skipping.`
+      )
+      return
+    }
+
+    console.log("Memento: Starting extraction...")
+
+    // 1. Extract the "meat" of the page
     const docClone = document.cloneNode(true) as Document
     const reader = new Readability(docClone)
     const article = reader.parse()
@@ -130,37 +143,33 @@ const extractAndSend = async () => {
       console.log("Memento: Content extracted. Title:", article.title)
 
       // 2. Send to API (Communication to Next.js backend)
-      try {
-        const apiBaseUrl = await getApiBaseUrl()
-        const response = await fetch(`${apiBaseUrl}/api/index`, {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            url: window.location.href,
-            title: article.title,
-            content: article.textContent
-          })
+      const apiBaseUrl = await getApiBaseUrl()
+      const response = await fetch(`${apiBaseUrl}/api/index`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          url: window.location.href,
+          title: article.title,
+          content: article.textContent
         })
-        
-        if (response.ok) {
-          console.log("Memento: Successfully indexed page.")
-        } else {
-          console.error("Memento: API returned error status:", response.status)
-        }
-      } catch (error) {
-        console.error("Memento: Failed to send to API. Is the web server running?", error)
+      })
+
+      if (response.ok) {
+        console.log("Memento: Successfully indexed page.")
+      } else {
+        console.error("Memento: API returned error status:", response.status)
       }
     } else {
       console.warn("Memento: Readability could not find any content on this page.")
     }
   } catch (error) {
-    console.error("Memento: Error during Readability parsing:", error)
+    console.error("Memento: Error during indexing process:", error)
   }
 }
 
-// The 30-Second Rule 
+// The 30-Second Rule
 window.addEventListener("load", () => {
   console.log("Memento: Content script loaded. Timer started (30s)...")
   setTimeout(extractAndSend, 30000)

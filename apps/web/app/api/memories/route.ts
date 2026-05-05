@@ -58,7 +58,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("memories")
-      .select("id, url, title, content, created_at, embedding, type")
+      .select("id, url, title, content, created_at, embedding, type, audio")
       .order("created_at", { ascending: false })
       .limit(100);
 

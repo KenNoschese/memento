@@ -29,12 +29,19 @@
       "https://*/*", "http://localhost:3000/*"
     ],
     "commands": {
-      "toggle-voice-record": {
+      "start-voice-record": {
         "suggested_key": {
           "default": "Alt+Shift+V",
           "mac": "Alt+Shift+V"
         },
-        "description": "Start/Stop Voice Recording"
+        "description": "Start Voice Recording"
+      },
+      "stop-voice-record": {
+        "suggested_key": {
+          "default": "Alt+Shift+X",
+          "mac": "Alt+Shift+X"
+        },
+        "description": "Stop Voice Recording"
       }
     },
     "permissions": [

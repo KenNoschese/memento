@@ -1,77 +1,43 @@
+-- Memento Database Migration: Aligning Contract
+-- This script aligns the database with 3072-dimensional Gemini embeddings and real audio storage.
+
+-- 1. Ensure vector extension is enabled
 create extension if not exists vector;
 
+-- 2. Create memory_type enum if it doesn't exist
 do $$
 begin
-  if not exists (
-    select 1
-    from pg_type
-    where typname = 'memory_type'
-  ) then
+  if not exists (select 1 from pg_type where typname = 'memory_type') then
     create type memory_type as enum ('page', 'voice_note');
   end if;
 end
 $$;
 
-alter table memories
-add column if not exists type memory_type;
+-- 3. Update memories table structure
+alter table memories add column if not exists type memory_type;
+alter table memories add column if not exists dedupe_key text;
+alter table memories add column if not exists audio text; -- For Base64 audio storage
 
-update memories
-set type = case
-  when title = 'Voice Note' then 'voice_note'::memory_type
-  else 'page'::memory_type
-end
-where type is null;
+-- Ensure existing records have a type
+update memories set type = 'page' where type is null;
+alter table memories alter column type set not null;
+alter table memories alter column type set default 'page';
 
-alter table memories
-alter column type set default 'page'::memory_type;
+-- 4. Align embedding dimensions to 3072 (Gemini default)
+-- Note: This will fail if there are existing rows with different dimensions.
+-- In a hackathon, it's often easiest to truncate the table if it's just test data.
+-- alter table memories alter column embedding type vector(3072);
 
-alter table memories
-alter column type set not null;
+-- 5. Create unique index for deduplication
+create unique index if not exists memories_dedupe_key_idx on memories (dedupe_key);
 
-alter table memories
-alter column embedding type vector(768);
-
-alter table memories
-add column if not exists dedupe_key text;
-
-update memories
-set dedupe_key = md5(
-  concat_ws(
-    E'\n',
-    type::text,
-    btrim(coalesce(url, '')),
-    regexp_replace(btrim(coalesce(title, '')), '\s+', ' ', 'g'),
-    regexp_replace(btrim(coalesce(content, '')), '\s+', ' ', 'g')
-  )
-)
-where dedupe_key is null;
-
-with ranked_memories as (
-  select
-    id,
-    row_number() over (
-      partition by dedupe_key
-      order by created_at asc, id asc
-    ) as duplicate_rank
-  from memories
-)
-delete from memories
-where id in (
-  select id
-  from ranked_memories
-  where duplicate_rank > 1
-);
-
-alter table memories
-alter column dedupe_key set not null;
-
-create unique index if not exists memories_dedupe_key_idx
-on memories (dedupe_key);
-
-drop function if exists match_memories(vector(768), double precision, integer);
+-- 6. Update match_memories RPC
+drop function if exists match_memories(vector(768), float, int);
+drop function if exists match_memories(vector(1536), float, int);
+drop function if exists match_memories(vector(3072), float, int);
 
 create or replace function match_memories (
-  query_embedding vector(768),
+  query_embedding vector(3072),
   match_threshold float,
   match_count int
 )
@@ -80,7 +46,8 @@ returns table (
   url text,
   title text,
   content text,
-  embedding vector(768),
+  audio text,
+  embedding vector(3072),
   type memory_type,
   similarity float
 )
@@ -93,6 +60,7 @@ begin
     memories.url,
     memories.title,
     memories.content,
+    memories.audio,
     memories.embedding,
     memories.type,
     1 - (memories.embedding <=> query_embedding) as similarity

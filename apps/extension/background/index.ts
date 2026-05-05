@@ -7,18 +7,19 @@ chrome.runtime.onInstalled.addListener(() => {
 })
 
 let isRecording = false
+let lastStartTime = 0
+let lastStopTime = 0
+const COMMAND_DEBOUNCE_MS = 1000
 
 // URL blocking for privacy/stability: protocols and hosts we should never record
 const BLOCKED_PROTOCOLS = [
-  'chrome-extension:',
-  'file:',
-  'about:',
-  'data:'
+  "chrome-extension:",
+  "file:",
+  "about:",
+  "data:"
 ]
 
-const BLOCKED_HOSTS = [
-  'localhost'
-]
+const BLOCKED_HOSTS = ["localhost"]
 
 const isUrlBlocked = (rawUrl?: string) => {
   if (!rawUrl) return true
@@ -39,19 +40,19 @@ const isUrlBlocked = (rawUrl?: string) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "background") return
   
-  if (message.type === "toggle-record") {
-    if (isRecording) {
-      void stopRecording()
-    } else {
-      void startRecording()
-    }
+  if (message.type === "start-record") {
+    console.log("Background: Starting recording via message...")
+    void startRecording()
+  } else if (message.type === "stop-record") {
+    console.log("Background: Stopping recording via message...")
+    void stopRecording()
   } else if (message.type === "recording-finished") {
-    console.log("Recording finished successfully")
+    console.log("Background: Recording finished reported.")
     isRecording = false
     chrome.action.setBadgeText({ text: "" })
     void teardownOffscreen()
   } else if (message.type === "recording-failed") {
-    console.error("Recording failed reported by offscreen:", message.error)
+    console.error("Background: Recording failed reported:", message.error)
     isRecording = false
     chrome.action.setBadgeText({ text: "ERR" })
     setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3000)
@@ -61,27 +62,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.commands.onCommand.addListener(async (command) => {
   console.log("Command received:", command)
-  if (command === "toggle-voice-record") {
-    const currentBadge = await chrome.action.getBadgeText({})
-    if (!currentBadge) {
-      chrome.action.setBadgeText({ text: "..." })
-    }
 
-    if (isRecording) {
-      await stopRecording()
-    } else {
-      await startRecording()
-    }
+  if (command === "start-voice-record") {
+    console.log("Background: Starting recording via command...")
+    await startRecording()
+  } else if (command === "stop-voice-record") {
+    console.log("Background: Stopping recording via command...")
+    await stopRecording()
   }
 })
 
 async function startRecording() {
+  const now = Date.now()
+  if (now - lastStartTime < COMMAND_DEBOUNCE_MS) {
+    console.warn("Start recording debounced.")
+    return
+  }
+  lastStartTime = now
+
+  if (isRecording) {
+    console.warn("Start recording called but already recording.")
+    return
+  }
+  isRecording = true
+
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
     const tab = tabs[0]
     
     if (!tab?.url || tab.url.startsWith("chrome://")) {
       console.warn("Cannot record on this page:", tab?.url)
+      isRecording = false
       chrome.action.setBadgeText({ text: "NA" })
       setTimeout(() => chrome.action.setBadgeText({ text: "" }), 2000)
       return
@@ -90,6 +101,7 @@ async function startRecording() {
     // Additional blocked URL checks (chrome-extension://, file://, about:, data:, localhost)
     if (isUrlBlocked(tab.url)) {
       console.warn("Cannot record on blocked/unsupported URL:", tab.url)
+      isRecording = false
       chrome.action.setBadgeText({ text: "NA" })
       setTimeout(() => chrome.action.setBadgeText({ text: "" }), 2000)
       return
@@ -118,15 +130,16 @@ async function startRecording() {
 
     if (attempts >= 10) {
       console.error("Failed to reach offscreen document after 10 attempts")
+      isRecording = false
       chrome.action.setBadgeText({ text: "FAIL" })
       setTimeout(() => chrome.action.setBadgeText({ text: "" }), 2000)
       return
     }
 
-    isRecording = true
     chrome.action.setBadgeText({ text: "REC" })
     chrome.action.setBadgeBackgroundColor({ color: "#FF0000" })
   } catch (error) {
+    isRecording = false
     console.error("Start recording logic error:", error)
     chrome.action.setBadgeText({ text: "ERR!" })
     setTimeout(() => chrome.action.setBadgeText({ text: "" }), 2000)
@@ -134,6 +147,18 @@ async function startRecording() {
 }
 
 async function stopRecording() {
+  const now = Date.now()
+  if (now - lastStopTime < COMMAND_DEBOUNCE_MS) {
+    console.warn("Stop recording debounced.")
+    return
+  }
+  lastStopTime = now
+
+  if (!isRecording) {
+    console.warn("Stop recording called while not recording.")
+    return
+  }
+
   try {
     await chrome.runtime.sendMessage({ type: "stop-recording", target: "offscreen" })
     isRecording = false
@@ -154,7 +179,7 @@ async function setupOffscreen() {
     if (contexts.length > 0) return
 
     await chrome.offscreen.createDocument({
-      url: "offscreen.html",
+      url: "tabs/offscreen.html",
       reasons: ["USER_MEDIA" as any],
       justification: "Recording audio for voice notes"
     })

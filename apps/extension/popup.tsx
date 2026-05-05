@@ -27,32 +27,36 @@ function IndexPopup() {
         fontFamily: "system-ui, -apple-system, sans-serif",
         backgroundColor: "#ffffff"
       }}>
-      <h2 style={{ 
-        margin: "0 0 4px 0", 
-        fontSize: "20px",
-        fontWeight: 700,
-        color: "#1a1a1a" 
-      }}>
+      <h2
+        style={{
+          margin: "0 0 4px 0",
+          fontSize: "20px",
+          fontWeight: 700,
+          color: "#1a1a1a"
+        }}>
         Memento
       </h2>
-      <div style={{ 
-        display: "flex", 
-        alignItems: "center", 
-        justifyContent: "space-between",
-        marginBottom: "20px"
-      }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "20px"
+        }}>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <div style={{ 
-            width: "8px", 
-            height: "8px", 
-            backgroundColor: isIndexingEnabled ? "#10b981" : "#d1d5db", 
-            borderRadius: "50%" 
-          }} />
+          <div
+            style={{
+              width: "8px",
+              height: "8px",
+              backgroundColor: isIndexingEnabled ? "#10b981" : "#d1d5db",
+              borderRadius: "50%"
+            }}
+          />
           <span style={{ fontSize: "12px", color: "#666" }}>
             {isIndexingEnabled ? "Auto-indexing active" : "Indexing paused"}
           </span>
         </div>
-        <button 
+        <button
           onClick={toggleIndexing}
           style={{
             fontSize: "10px",
@@ -65,7 +69,7 @@ function IndexPopup() {
           {isIndexingEnabled ? "Pause" : "Resume"}
         </button>
       </div>
-      
+
       <button
         onClick={async () => {
           try {
@@ -93,7 +97,10 @@ function IndexPopup() {
 
       <button
         onClick={async () => {
-          chrome.runtime.sendMessage({ type: "toggle-record", target: "background" })
+          chrome.runtime.sendMessage({
+            type: "start-record",
+            target: "background"
+          })
         }}
         style={{
           backgroundColor: "#dc2626",
@@ -107,7 +114,29 @@ function IndexPopup() {
           marginBottom: "8px",
           transition: "opacity 0.2s"
         }}>
-        Test Record
+        Start Recording
+      </button>
+
+      <button
+        onClick={async () => {
+          chrome.runtime.sendMessage({
+            type: "stop-record",
+            target: "background"
+          })
+        }}
+        style={{
+          backgroundColor: "#111827",
+          color: "white",
+          border: "none",
+          padding: "8px 14px",
+          borderRadius: "6px",
+          cursor: "pointer",
+          fontWeight: 600,
+          fontSize: "13px",
+          marginBottom: "8px",
+          transition: "opacity 0.2s"
+        }}>
+        Stop Recording
       </button>
 
       <button
@@ -148,14 +177,15 @@ function IndexPopup() {
         }}>
         Settings
       </button>
-      
-      <p style={{ 
-        marginTop: "16px", 
-        fontSize: "10px", 
-        color: "#999", 
-        textAlign: "center" 
-      }}>
-        Content is saved after 30 seconds.
+
+      <p
+        style={{
+          marginTop: "16px",
+          fontSize: "10px",
+          color: "#999",
+          textAlign: "center"
+        }}>
+        Content is saved after 5 seconds.
       </p>
     </div>
   )

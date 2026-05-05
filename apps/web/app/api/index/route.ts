@@ -73,8 +73,10 @@ export async function POST(req: Request) {
 
     let embedding: number[];
     try {
+      console.log("API: Generating 3072-dim embedding with gemini-embedding-001...");
       const result = await model.embedContent(content.substring(0, 30000));
       embedding = result.embedding.values;
+      console.log("API: Embedding generated. Size:", embedding.length);
     } catch (geminiError: unknown) {
       const message = getErrorMessage(geminiError);
       console.error("API: Gemini Embedding Error:", message);
