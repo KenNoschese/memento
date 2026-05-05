@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
   Brain,
+  ChevronDown,
   ExternalLink,
   Loader2,
   Play,
@@ -56,6 +57,9 @@ export default function Dashboard() {
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [deletingMemoryId, setDeletingMemoryId] = useState<string | null>(null);
+  const [expandedVoiceNoteIds, setExpandedVoiceNoteIds] = useState<string[]>(
+    [],
+  );
 
   const selectedMemory = useMemo(
     () => memories.find((memory) => memory.id === selectedMemoryId) ?? null,
@@ -215,6 +219,14 @@ export default function Dashboard() {
     },
     [],
   );
+
+  const toggleVoiceNote = useCallback((noteId: string) => {
+    setExpandedVoiceNoteIds((current) =>
+      current.includes(noteId)
+        ? current.filter((id) => id !== noteId)
+        : [...current, noteId],
+    );
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -436,93 +448,126 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <section className="mb-8">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
-                Page Content
-              </h3>
-              <article className="prose prose-zinc max-w-none">
-                <div className="whitespace-pre-wrap text-sm leading-7 text-zinc-700">
-                  {selectedMemory.content?.trim() ||
-                    "No content available yet."}
-                </div>
-              </article>
-            </section>
-
-            <section>
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
-                  Attached Voice Notes
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+              <section className="min-w-0">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                  Page Content
                 </h3>
-                <span className="text-xs text-zinc-400">
-                  {selectedMemory.voiceNotes.length} total
-                </span>
-              </div>
+                <article className="rounded-xl border border-zinc-200 bg-white px-5 py-5">
+                  <div className="whitespace-pre-wrap text-sm leading-7 text-zinc-700">
+                    {selectedMemory.content?.trim() ||
+                      "No content available yet."}
+                  </div>
+                </article>
+              </section>
 
-              {selectedMemory.voiceNotes.length > 0 ? (
-                <div className="space-y-3">
-                  {selectedMemory.voiceNotes.map((note) => {
-                    const matched =
-                      selectedMemory.matchedVoiceNoteIds?.includes(note.id);
+              <aside className="order-first lg:order-none">
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                        Attached Voice Notes
+                      </h3>
+                      <p className="mt-1 text-xs text-zinc-400">
+                        {selectedMemory.voiceNotes.length} total
+                      </p>
+                    </div>
+                  </div>
 
-                    return (
-                      <div
-                        key={note.id}
-                        className={`rounded-xl border px-4 py-4 ${
-                          matched
-                            ? "border-blue-200 bg-blue-50/60"
-                            : "border-zinc-200 bg-zinc-50"
-                        }`}
-                      >
-                        <div className="mb-3 flex items-start justify-between gap-4">
-                          <div>
-                            <div className="text-sm font-medium text-zinc-900">
-                              Voice Note
+                  {selectedMemory.voiceNotes.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedMemory.voiceNotes.map((note) => {
+                        const matched =
+                          selectedMemory.matchedVoiceNoteIds?.includes(note.id);
+                        const expanded = expandedVoiceNoteIds.includes(note.id);
+
+                        return (
+                          <div
+                            key={note.id}
+                            className={`rounded-lg border bg-white ${
+                              matched
+                                ? "border-blue-200"
+                                : "border-zinc-200"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3 px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() => toggleVoiceNote(note.id)}
+                                className="min-w-0 flex-1 text-left"
+                              >
+                                <div className="text-sm font-medium text-zinc-900">
+                                  Voice Note
+                                </div>
+                                <div className="mt-1 text-xs text-zinc-500">
+                                  {formatTimestamp(note.created_at)}
+                                </div>
+                              </button>
+
+                              <div className="flex shrink-0 items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => playVoiceNote(note)}
+                                  className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 transition hover:border-red-300 hover:bg-red-100"
+                                >
+                                  <Play size={13} fill="currentColor" />
+                                  Play
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleVoiceNote(note.id)}
+                                  aria-label={
+                                    expanded
+                                      ? "Collapse transcript"
+                                      : "Expand transcript"
+                                  }
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-900"
+                                >
+                                  <ChevronDown
+                                    size={15}
+                                    className={`transition ${
+                                      expanded ? "rotate-180" : ""
+                                    }`}
+                                  />
+                                </button>
+                              </div>
                             </div>
-                            <div className="mt-1 text-xs text-zinc-500">
-                              {formatTimestamp(note.created_at)}
-                            </div>
-                          </div>
 
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => playVoiceNote(note)}
-                              className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:border-red-300 hover:bg-red-100"
-                            >
-                              <Play size={15} fill="currentColor" />
-                              {note.audio ? "Play Recording" : "Play (TTS)"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void handleDeleteMemory(note.id, "voice note")
-                              }
-                              disabled={deletingMemoryId === note.id}
-                              className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {deletingMemoryId === note.id ? (
-                                <Loader2 size={15} className="animate-spin" />
-                              ) : (
-                                <Trash2 size={15} />
-                              )}
-                              Delete
-                            </button>
+                            {expanded ? (
+                              <div className="border-t border-zinc-200 px-4 py-3">
+                                <div className="mb-3 whitespace-pre-wrap text-sm leading-6 text-zinc-700">
+                                  {note.content?.trim() ||
+                                    "No transcript available."}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleDeleteMemory(note.id, "voice note")
+                                  }
+                                  disabled={deletingMemoryId === note.id}
+                                  className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {deletingMemoryId === note.id ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <Trash2 size={13} />
+                                  )}
+                                  Delete
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
-                        </div>
-
-                        <div className="whitespace-pre-wrap text-sm leading-6 text-zinc-700">
-                          {note.content?.trim() || "No transcript available."}
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-zinc-200 bg-white px-4 py-6 text-sm text-zinc-500">
+                      No voice notes attached to this page yet.
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-500">
-                  No voice notes attached to this page yet.
-                </div>
-              )}
-            </section>
+              </aside>
+            </div>
           </div>
         ) : (
           <div className="flex h-full items-center justify-center px-8 text-sm text-zinc-500">
