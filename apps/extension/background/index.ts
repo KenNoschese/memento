@@ -41,13 +41,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "background") return
   
   if (message.type === "start-record") {
-    console.log("Background: Starting recording via message...")
     void startRecording()
   } else if (message.type === "stop-record") {
-    console.log("Background: Stopping recording via message...")
     void stopRecording()
   } else if (message.type === "recording-finished") {
-    console.log("Background: Recording finished reported.")
     isRecording = false
     chrome.action.setBadgeText({ text: "" })
     void teardownOffscreen()
@@ -61,13 +58,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 })
 
 chrome.commands.onCommand.addListener(async (command) => {
-  console.log("Command received:", command)
-
   if (command === "start-voice-record") {
-    console.log("Background: Starting recording via command...")
     await startRecording()
   } else if (command === "stop-voice-record") {
-    console.log("Background: Stopping recording via command...")
     await stopRecording()
   }
 })
@@ -75,13 +68,11 @@ chrome.commands.onCommand.addListener(async (command) => {
 async function startRecording() {
   const now = Date.now()
   if (now - lastStartTime < COMMAND_DEBOUNCE_MS) {
-    console.warn("Start recording debounced.")
     return
   }
   lastStartTime = now
 
   if (isRecording) {
-    console.warn("Start recording called but already recording.")
     return
   }
   isRecording = true
@@ -149,13 +140,11 @@ async function startRecording() {
 async function stopRecording() {
   const now = Date.now()
   if (now - lastStopTime < COMMAND_DEBOUNCE_MS) {
-    console.warn("Stop recording debounced.")
     return
   }
   lastStopTime = now
 
   if (!isRecording) {
-    console.warn("Stop recording called while not recording.")
     return
   }
 

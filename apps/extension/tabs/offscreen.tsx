@@ -8,7 +8,6 @@ export default function OffscreenPage() {
   const isCurrentlyRecording = useRef<boolean>(false)
 
   useEffect(() => {
-    console.log("Offscreen: Component mounted.")
     const handleMessage = async (message: any) => {
       if (message.target !== "offscreen") return
 
@@ -21,21 +20,12 @@ export default function OffscreenPage() {
 
     chrome.runtime.onMessage.addListener(handleMessage)
 
-    const heartbeat = setInterval(() => {
-      console.debug("Offscreen: Heartbeat (Alive)", {
-        recording: isCurrentlyRecording.current,
-        recorderState: mediaRecorderRef.current?.state
-      })
-    }, 2000)
-
     return () => {
-      console.log("Offscreen: Component unmounting.")
       if (mediaRecorderRef.current?.state === "recording") {
         mediaRecorderRef.current.stop()
       }
       streamRef.current?.getTracks().forEach((t) => t.stop())
       chrome.runtime.onMessage.removeListener(handleMessage)
-      clearInterval(heartbeat)
     }
   }, [])
 
@@ -46,7 +36,6 @@ export default function OffscreenPage() {
     formData.append("url", url)
 
     try {
-      console.log("Offscreen: Uploading to API...")
       const apiBaseUrl = await getApiBaseUrl()
       const response = await fetch(`${apiBaseUrl}/api/voice`, {
         method: "POST",
@@ -58,8 +47,6 @@ export default function OffscreenPage() {
       if (!response.ok) {
         throw new Error(result.error || `Server returned ${response.status}`)
       }
-
-      console.log("Offscreen: Upload success!", result)
     } catch (error) {
       console.error("Offscreen: Upload failed", error)
       chrome.runtime.sendMessage({
@@ -73,13 +60,11 @@ export default function OffscreenPage() {
 
   const startRecording = async (url: string) => {
     if (isCurrentlyRecording.current) {
-      console.warn("Offscreen: Already recording. Ignoring start request.")
       return
     }
     isCurrentlyRecording.current = true
 
     try {
-      console.log("Offscreen: Initializing MediaRecorder for URL:", url)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
 
@@ -100,10 +85,8 @@ export default function OffscreenPage() {
       }
 
       mediaRecorder.onstop = async () => {
-        console.log("Offscreen: MediaRecorder 'onstop' event fired.")
         try {
           const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" })
-          console.log(`Offscreen: Uploading ${audioBlob.size} bytes...`)
 
           if (audioBlob.size < 1000) {
             console.warn("Offscreen: Recording was too short/small. Skipping upload.")
@@ -130,7 +113,6 @@ export default function OffscreenPage() {
       }
 
       mediaRecorder.start(1000)
-      console.log("Offscreen: MediaRecorder started with 1000ms timeslice.")
     } catch (error) {
       isCurrentlyRecording.current = false
       chrome.runtime.sendMessage({
@@ -143,7 +125,6 @@ export default function OffscreenPage() {
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      console.log("Offscreen: Manually stopping MediaRecorder...")
       mediaRecorderRef.current.stop()
     } else {
       console.warn("Offscreen: stopRecording called but not in 'recording' state.", {
