@@ -17,6 +17,7 @@ import type {
   SearchResponse,
   VoiceNoteRecord,
 } from "@/app/lib/types";
+import { normalizeExtractedText } from "@/app/lib/memories";
 
 type MemoriesResponse = {
   memories: PageMemoryRecord[];
@@ -493,7 +494,7 @@ export default function Dashboard() {
 
                       {showRawPageTextIds.includes(selectedMemory.id) ? (
                         <div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-zinc-600">
-                          {selectedMemory.content}
+                          {normalizeExtractedText(selectedMemory.content)}
                         </div>
                       ) : null}
                     </div>
@@ -501,7 +502,7 @@ export default function Dashboard() {
                 </article>
               </section>
 
-              <aside className="order-first lg:order-none">
+              <aside className="order-first lg:order-0">
                 <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>

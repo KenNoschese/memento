@@ -2,7 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getErrorMessage } from "@/app/lib/errors";
-import { canonicalizeUrl, isUniqueViolation } from "@/app/lib/memories";
+import {
+  canonicalizeUrl,
+  isUniqueViolation,
+  normalizeExtractedText,
+} from "@/app/lib/memories";
 import { generatePageSummary } from "@/app/lib/page-summaries";
 import {
   buildPageMemoryDedupeKey,
@@ -34,12 +38,13 @@ export async function OPTIONS() {
 export async function POST(req: Request) {
   try {
     const { url, title, content } = await req.json();
+    const normalizedContent = normalizeExtractedText(content);
     const canonicalUrl = canonicalizeUrl(url);
     const dedupeKey = buildPageMemoryDedupeKey({
       url,
       canonicalUrl,
       title,
-      content,
+      content: normalizedContent,
     });
 
     if (!process.env.GEMINI_API_KEY) {
@@ -52,7 +57,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!content) {
+    if (!normalizedContent) {
       console.warn("API: Received empty content for URL:", url);
       return NextResponse.json(
         { message: "Empty content ignored" },
@@ -71,7 +76,9 @@ export async function POST(req: Request) {
     let embedding: number[];
     try {
       console.log("API: Generating 3072-dim embedding with gemini-embedding-001...");
-      const result = await model.embedContent(content.substring(0, 30000));
+      const result = await model.embedContent(
+        normalizedContent.substring(0, 30000),
+      );
       embedding = result.embedding.values;
       console.log("API: Embedding generated. Size:", embedding.length);
     } catch (geminiError: unknown) {
@@ -82,7 +89,11 @@ export async function POST(req: Request) {
 
     let summary: string | null = null;
     try {
-      summary = await generatePageSummary({ url, title, content });
+      summary = await generatePageSummary({
+        url,
+        title,
+        content: normalizedContent,
+      });
     } catch (summaryError: unknown) {
       console.warn(
         "API: Page summary generation failed:",
@@ -94,7 +105,7 @@ export async function POST(req: Request) {
       url,
       canonical_url: canonicalUrl,
       title,
-      content,
+      content: normalizedContent,
       summary,
       embedding,
       type: "page" as const,

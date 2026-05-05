@@ -27,6 +27,22 @@ export function canonicalizeUrl(rawUrl: string): string {
   }
 }
 
+export function normalizeExtractedText(
+  value: string | null | undefined,
+): string {
+  const raw = (value ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!raw) {
+    return "";
+  }
+
+  const paragraphs = raw
+    .split(/\n\s*\n+/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  return paragraphs.join("\n\n");
+}
+
 export function buildMemoryDedupeKey(input: {
   type: MemoryType;
   url: string;
