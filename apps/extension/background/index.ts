@@ -14,19 +14,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   if (message.type === "toggle-record") {
     if (isRecording) {
-      stopRecording()
+      void stopRecording()
     } else {
-      startRecording()
+      void startRecording()
     }
   } else if (message.type === "recording-finished") {
     console.log("Recording finished successfully")
     isRecording = false
     chrome.action.setBadgeText({ text: "" })
+    void teardownOffscreen()
   } else if (message.type === "recording-failed") {
     console.error("Recording failed reported by offscreen:", message.error)
     isRecording = false
     chrome.action.setBadgeText({ text: "ERR" })
     setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3000)
+    void teardownOffscreen()
   }
 })
 
@@ -126,3 +128,18 @@ async function setupOffscreen() {
   }
 }
 
+async function teardownOffscreen() {
+  try {
+    const contexts = await (chrome.runtime as any).getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT"]
+    })
+
+    if (contexts.length === 0) return
+
+    await chrome.offscreen.closeDocument()
+  } catch (error: any) {
+    if (!error?.message?.includes("No current offscreen document")) {
+      console.error("Offscreen teardown failed:", error)
+    }
+  }
+}

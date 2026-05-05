@@ -77,6 +77,7 @@ The repo still includes `reactflow` for future graph-style exploration, but the 
 - embeddings are stored as `vector(768)`
 - page captures are persisted with `type = 'page'`
 - voice notes are persisted with `type = 'voice_note'`
+- exact retry duplicates are collapsed with a persisted dedupe key
 - UI and filtering should rely on `type`, not title-based inference
 
 ## Local Development

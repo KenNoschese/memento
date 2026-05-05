@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getErrorMessage } from "@/app/lib/errors";
+import { buildMemoryDedupeKey, isUniqueViolation } from "@/app/lib/memories";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,6 +30,12 @@ export async function OPTIONS() {
 export async function POST(req: Request) {
   try {
     const { url, title, content } = await req.json();
+    const dedupeKey = buildMemoryDedupeKey({
+      type: "page",
+      url,
+      title,
+      content,
+    });
     
     if (!process.env.GEMINI_API_KEY) {
       console.error("API: GEMINI_API_KEY is missing from environment variables.");
@@ -43,18 +50,16 @@ export async function POST(req: Request) {
     console.log("API: Checking for duplicates for:", url);
     const { data: existing, error: checkError } = await supabase
       .from("memories")
-      .select("id, content")
-      .eq("url", url)
-      .order("created_at", { ascending: false })
-      .limit(1)
+      .select("id")
+      .eq("dedupe_key", dedupeKey)
       .maybeSingle();
 
     if (checkError) {
       console.error("API: Duplicate check error:", checkError.message);
     }
 
-    if (existing && existing.content === content) {
-      console.log("API: Exact content already indexed for this URL. Skipping.");
+    if (existing) {
+      console.log("API: Exact memory already indexed. Skipping.");
       return NextResponse.json({ message: "Duplicate content skipped" }, { status: 200, headers: corsHeaders });
     }
 
@@ -74,9 +79,17 @@ export async function POST(req: Request) {
     console.log("API: Inserting into Supabase...");
     const { error: dbError } = await supabase
       .from("memories")
-      .insert([{ url, title, content, embedding, type: "page" }]);
+      .insert([{ url, title, content, embedding, type: "page", dedupe_key: dedupeKey }]);
 
     if (dbError) {
+      if (isUniqueViolation(dbError)) {
+        console.log("API: Duplicate insert raced with an existing row. Skipping.");
+        return NextResponse.json(
+          { message: "Duplicate content skipped" },
+          { status: 200, headers: corsHeaders },
+        );
+      }
+
       console.error("API: Supabase Error:", dbError.message);
       throw dbError;
     }
