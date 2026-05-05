@@ -77,6 +77,7 @@ export async function POST(req: Request) {
       canonical_url: string;
       title: string | null;
       content: string | null;
+      summary?: string | null;
       audio: string | null;
       embedding: number[] | string | null;
       type: "page" | "voice_note";
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
 
     const { data: pages, error: pageError } = await supabase
       .from("memories")
-      .select("id, url, canonical_url, title, content, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
       .eq("type", "page")
       .in("id", pageIds);
 
@@ -115,7 +116,7 @@ export async function POST(req: Request) {
 
     const { data: voiceNotes, error: voiceError } = await supabase
       .from("memories")
-      .select("id, url, canonical_url, title, content, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
       .eq("type", "voice_note")
       .in("parent_memory_id", pageIds)
       .order("created_at", { ascending: false });

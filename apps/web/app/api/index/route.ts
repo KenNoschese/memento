@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getErrorMessage } from "@/app/lib/errors";
 import { canonicalizeUrl, isUniqueViolation } from "@/app/lib/memories";
+import { generatePageSummary } from "@/app/lib/page-summaries";
 import {
   buildPageMemoryDedupeKey,
   findPageMemoryByCanonicalUrl,
@@ -79,11 +80,22 @@ export async function POST(req: Request) {
       throw new Error(`Gemini failed: ${message}`);
     }
 
+    let summary: string | null = null;
+    try {
+      summary = await generatePageSummary({ url, title, content });
+    } catch (summaryError: unknown) {
+      console.warn(
+        "API: Page summary generation failed:",
+        getErrorMessage(summaryError),
+      );
+    }
+
     const pageValues = {
       url,
       canonical_url: canonicalUrl,
       title,
       content,
+      summary,
       embedding,
       type: "page" as const,
       dedupe_key: dedupeKey,

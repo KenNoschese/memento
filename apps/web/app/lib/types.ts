@@ -6,6 +6,7 @@ export type BaseMemoryRecord = {
   canonical_url: string;
   title: string | null;
   content: string | null;
+  summary?: string | null;
   created_at: string;
   embedding?: number[] | string | null;
   similarity?: number | null;

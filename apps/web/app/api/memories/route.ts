@@ -61,7 +61,7 @@ export async function GET() {
   try {
     const { data: pageData, error: pageError } = await supabase
       .from("memories")
-      .select("id, url, canonical_url, title, content, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
       .eq("type", "page")
       .order("created_at", { ascending: false })
       .limit(100);
@@ -75,7 +75,7 @@ export async function GET() {
     const { data: voiceData, error: voiceError } = pageIds.length
       ? await supabase
           .from("memories")
-          .select("id, url, canonical_url, title, content, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+          .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
           .eq("type", "voice_note")
           .in("parent_memory_id", pageIds)
           .order("created_at", { ascending: false })

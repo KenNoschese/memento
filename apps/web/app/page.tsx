@@ -60,6 +60,7 @@ export default function Dashboard() {
   const [expandedVoiceNoteIds, setExpandedVoiceNoteIds] = useState<string[]>(
     [],
   );
+  const [showRawPageTextIds, setShowRawPageTextIds] = useState<string[]>([]);
 
   const selectedMemory = useMemo(
     () => memories.find((memory) => memory.id === selectedMemoryId) ?? null,
@@ -228,6 +229,14 @@ export default function Dashboard() {
     );
   }, []);
 
+  const toggleRawPageText = useCallback((pageId: string) => {
+    setShowRawPageTextIds((current) =>
+      current.includes(pageId)
+        ? current.filter((id) => id !== pageId)
+        : [...current, pageId],
+    );
+  }, []);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       void fetchBriefing();
@@ -375,7 +384,9 @@ export default function Dashboard() {
                       selected ? "text-zinc-300" : "text-zinc-500"
                     }`}
                   >
-                    {memory.content?.trim() || memory.url}
+                    {memory.summary?.trim() ||
+                      memory.content?.trim() ||
+                      memory.url}
                   </span>
 
                   <div
@@ -451,13 +462,42 @@ export default function Dashboard() {
             <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
               <section className="min-w-0">
                 <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
-                  Page Content
+                  Page Summary
                 </h3>
                 <article className="rounded-xl border border-zinc-200 bg-white px-5 py-5">
                   <div className="whitespace-pre-wrap text-sm leading-7 text-zinc-700">
-                    {selectedMemory.content?.trim() ||
-                      "No content available yet."}
+                    {selectedMemory.summary?.trim() ||
+                      selectedMemory.content?.trim() ||
+                      selectedMemory.url}
                   </div>
+
+                  {selectedMemory.content?.trim() ? (
+                    <div className="mt-5 border-t border-zinc-200 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => toggleRawPageText(selectedMemory.id)}
+                        className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-zinc-500 transition hover:text-zinc-900"
+                      >
+                        <ChevronDown
+                          size={14}
+                          className={`transition ${
+                            showRawPageTextIds.includes(selectedMemory.id)
+                              ? "rotate-180"
+                              : ""
+                          }`}
+                        />
+                        {showRawPageTextIds.includes(selectedMemory.id)
+                          ? "Hide full extracted text"
+                          : "Show full extracted text"}
+                      </button>
+
+                      {showRawPageTextIds.includes(selectedMemory.id) ? (
+                        <div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-zinc-600">
+                          {selectedMemory.content}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </article>
               </section>
 
@@ -485,9 +525,7 @@ export default function Dashboard() {
                           <div
                             key={note.id}
                             className={`rounded-lg border bg-white ${
-                              matched
-                                ? "border-blue-200"
-                                : "border-zinc-200"
+                              matched ? "border-blue-200" : "border-zinc-200"
                             }`}
                           >
                             <div className="flex items-start justify-between gap-3 px-4 py-3">
@@ -542,13 +580,19 @@ export default function Dashboard() {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    void handleDeleteMemory(note.id, "voice note")
+                                    void handleDeleteMemory(
+                                      note.id,
+                                      "voice note",
+                                    )
                                   }
                                   disabled={deletingMemoryId === note.id}
                                   className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {deletingMemoryId === note.id ? (
-                                    <Loader2 size={13} className="animate-spin" />
+                                    <Loader2
+                                      size={13}
+                                      className="animate-spin"
+                                    />
                                   ) : (
                                     <Trash2 size={13} />
                                   )}

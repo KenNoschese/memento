@@ -38,7 +38,7 @@ export async function GET() {
     // 1. Fetch last 10 page memories
     const { data: memories, error: dbError } = await supabase
       .from("memories")
-      .select("id, title, content, url, created_at")
+      .select("id, title, content, summary, url, created_at")
       .eq("type", "page")
       .order("created_at", { ascending: false })
       .limit(10);
@@ -61,7 +61,10 @@ export async function GET() {
     const context = (memories ?? [])
       .map((memory, index) => {
         const title = memory.title?.trim() || "Untitled";
-        const contentSnippet = memory.content?.trim().slice(0, 500) || "No content captured.";
+        const contentSnippet =
+          memory.summary?.trim() ||
+          memory.content?.trim().slice(0, 500) ||
+          "No content captured.";
         return `[${index + 1}] Title: ${title}\nContent snippet: ${contentSnippet}`;
       })
       .join("\n\n");

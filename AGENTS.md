@@ -134,7 +134,7 @@ Expected variables include:
 1. The extension content script runs on page load.
 2. It waits before extracting content using `Readability`.
 3. It posts `{ url, title, content }` to `apps/web/app/api/index/route.ts`.
-4. The web app generates a Gemini embedding and stores the memory in Supabase.
+4. The web app generates a concise page summary plus a Gemini embedding and stores the memory in Supabase.
 
 Main files:
 - `apps/extension/contents/indexer.ts`
@@ -196,6 +196,7 @@ Main files:
   - `canonical_url`
   - `title`
   - `content`
+  - `summary` (default readable recap for dashboard rendering)
   - `audio` (Base64 string for voice notes)
   - `embedding` (vector(3072))
   - `type`
@@ -217,6 +218,9 @@ These are current repo realities and should influence design decisions:
 
 - **Voice attachment now depends on canonical page identity**
   - voice notes attach to a canonical page memory, and placeholder page anchors may exist until indexing fills them in
+
+- **Readability output is intentionally preserved**
+  - page summaries are now the default reading surface, while raw extracted text remains stored for search and manual inspection
 
 - **Localhost coupling**
   - extension network calls are still pinned to local dev URLs
