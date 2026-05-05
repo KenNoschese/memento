@@ -1,9 +1,7 @@
-import { Groq } from "groq-sdk";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-const groqApiKey = process.env.GROQ_API_KEY;
-const groq = groqApiKey ? new Groq({ apiKey: groqApiKey }) : null;
-const summaryModel =
-  process.env.GROQ_BRIEFING_MODEL || "llama-3.3-70b-versatile";
+const geminiApiKey = process.env.GEMINI_API_KEY;
+const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
 
 export interface PageSummaryResult {
   summary: string | null;
@@ -15,38 +13,52 @@ export async function generatePageSummary(input: {
   url: string;
   content: string;
 }): Promise<PageSummaryResult> {
-  if (!groq || !input.content.trim()) {
+  if (!genAI || !input.content.trim()) {
     return { summary: null, tags: [] };
   }
 
-  const title = input.title?.trim() || "Untitled";
-  const content = input.content.trim().slice(0, 12000);
-
-  const completion = await groq.chat.completions.create({
-    model: summaryModel,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You analyze webpage content for a browsing memory app. Return a JSON object with two fields: 'summary' (a string, 2-4 sentences describing why this page mattered) and 'tags' (an array of 1-3 broad strings like 'Programming', 'News', 'Shopping'). Do not use markdown or extra text.",
+  const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: SchemaType.OBJECT,
+        properties: {
+          summary: { type: SchemaType.STRING },
+          tags: {
+            type: SchemaType.ARRAY,
+            items: { type: SchemaType.STRING },
+          },
+        },
+        required: ["summary", "tags"],
       },
-      {
-        role: "user",
-        content: `Title: ${title}\nURL: ${input.url}\n\nPage text:\n${content}`,
-      },
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.1,
+    },
   });
 
+  const title = input.title?.trim() || "Untitled";
+  const content = input.content.trim().slice(0, 30000); // Gemini handles larger context
+
+  const prompt = `You analyze webpage content for a browsing memory app.
+Analyze the following content and return a concise summary (2-4 sentences) and 1-3 broad tags.
+
+Title: ${title}
+URL: ${input.url}
+
+Page text:
+${content}`;
+
   try {
-    const data = JSON.parse(completion.choices[0]?.message?.content || "{}");
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const text = response.text();
+    const data = JSON.parse(text);
+
     return {
       summary: data.summary?.trim() || null,
       tags: Array.isArray(data.tags) ? data.tags : [],
     };
   } catch (e) {
-    console.error("Failed to parse summary JSON", e);
+    console.error("Gemini summary generation failed", e);
     return { summary: null, tags: [] };
   }
 }

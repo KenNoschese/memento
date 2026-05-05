@@ -1,47 +1,47 @@
 import { createClient } from "@supabase/supabase-js"
-import { Groq } from "groq-sdk"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-const groqApiKey = process.env.GROQ_API_KEY
-const summaryModel =
-  process.env.GROQ_BRIEFING_MODEL || "llama-3.3-70b-versatile"
+const geminiApiKey = process.env.GEMINI_API_KEY
 
-if (!supabaseUrl || !supabaseKey || !groqApiKey) {
+if (!supabaseUrl || !supabaseKey || !geminiApiKey) {
   console.error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, or GROQ_API_KEY",
+    "Missing NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, or GEMINI_API_KEY",
   )
   process.exit(1)
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey)
-const groq = new Groq({ apiKey: groqApiKey })
+const genAI = new GoogleGenerativeAI(geminiApiKey)
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
 
 async function generateSummary(memory) {
   const title = memory.title?.trim() || "Untitled"
-  const content = memory.content?.trim().slice(0, 12000) || ""
+  const content = memory.content?.trim().slice(0, 30000) || ""
 
   if (!content) {
     return null
   }
 
-  const completion = await groq.chat.completions.create({
-    model: summaryModel,
-    temperature: 0.2,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You write concise page-memory summaries for a browsing memory app. Write 2 to 4 short sentences that help a user instantly remember why this page mattered. Focus on the main subject, likely task, and the most useful takeaways. Do not use markdown, bullet points, or filler like 'This page discusses'.",
-      },
-      {
-        role: "user",
-        content: `Title: ${title}\nURL: ${memory.url}\n\nPage text:\n${content}`,
-      },
-    ],
-  })
+  const prompt = `You write concise page-memory summaries for a browsing memory app.
+Analyze the following content and write 2 to 4 short sentences that help a user instantly remember why this page mattered.
+Focus on the main subject, likely task, and the most useful takeaways.
+Do not use markdown, bullet points, or filler like 'This page discusses'.
 
-  return completion.choices[0]?.message?.content?.trim() || null
+Title: ${title}
+URL: ${memory.url}
+
+Page text:
+${content}`
+
+  try {
+    const result = await model.generateContent(prompt)
+    return result.response.text()?.trim() || null
+  } catch (e) {
+    console.error(`Gemini failed for ${memory.id}`, e)
+    return null
+  }
 }
 
 async function main() {
