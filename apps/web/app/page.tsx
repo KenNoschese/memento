@@ -32,6 +32,21 @@ type MemoriesResponse = {
   memories: PageMemoryRecord[];
 };
 
+type LandingVoiceNote = VoiceNoteRecord & {
+  pageTitle: string;
+  pageId: string;
+};
+
+type VoiceInsightItem = {
+  kind: "action" | "decision";
+  text: string;
+  normalizedText: string;
+  pageId: string;
+  pageTitle: string;
+  voiceNoteId: string;
+  createdAt: string;
+};
+
 const SIDEBAR_MIN_WIDTH = 300;
 const SIDEBAR_MAX_WIDTH = 460;
 const SIDEBAR_DEFAULT_WIDTH = 384;
@@ -57,6 +72,10 @@ function SectionLabel({
       <span>{children}</span>
     </div>
   );
+}
+
+function normalizeInsightText(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function SidebarFilterButton({
@@ -290,6 +309,7 @@ function LandingView({
   isLoadingBriefing,
   memories,
   onSelectMemory,
+  onSelectVoiceInsight,
   onPlayVoiceNote,
   playingVoiceNoteId,
 }: {
@@ -297,14 +317,16 @@ function LandingView({
   isLoadingBriefing: boolean;
   memories: PageMemoryRecord[];
   onSelectMemory: (id: string) => void;
+  onSelectVoiceInsight: (pageId: string, voiceNoteId: string) => void;
   onPlayVoiceNote: (note: VoiceNoteRecord) => void;
   playingVoiceNoteId: string | null;
 }) {
-  const recentVoiceNotes = useMemo(() => {
-    const allNotes: (VoiceNoteRecord & {
-      pageTitle: string;
-      pageId: string;
-    })[] = [];
+  const [activeInsightTab, setActiveInsightTab] = useState<
+    "action" | "decision"
+  >("action");
+
+  const allVoiceNotes = useMemo(() => {
+    const allNotes: LandingVoiceNote[] = [];
 
     memories.forEach((memory) => {
       memory.voiceNotes.forEach((note) => {
@@ -316,15 +338,68 @@ function LandingView({
       });
     });
 
-    return allNotes
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      )
-      .slice(0, 3);
+    return allNotes.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
   }, [memories]);
 
+  const recentVoiceNotes = useMemo(() => allVoiceNotes.slice(0, 3), [allVoiceNotes]);
+
+  const recentAnalyzedVoiceNotes = useMemo(
+    () =>
+      allVoiceNotes
+        .filter(
+          (note) =>
+            note.analysis?.action_items.length ||
+            note.analysis?.decisions.length,
+        )
+        .slice(0, 10),
+    [allVoiceNotes],
+  );
+
+  const buildInsightItems = useCallback(
+    (kind: "action" | "decision"): VoiceInsightItem[] => {
+      const deduped = new Map<string, VoiceInsightItem>();
+
+      recentAnalyzedVoiceNotes.forEach((note) => {
+        const items =
+          kind === "action"
+            ? note.analysis?.action_items ?? []
+            : note.analysis?.decisions ?? [];
+
+        items.forEach((item) => {
+          const trimmed = item.trim();
+          const normalized = normalizeInsightText(trimmed);
+          if (!trimmed || !normalized || deduped.has(normalized)) {
+            return;
+          }
+
+          deduped.set(normalized, {
+            kind,
+            text: trimmed,
+            normalizedText: normalized,
+            pageId: note.pageId,
+            pageTitle: note.pageTitle,
+            voiceNoteId: note.id,
+            createdAt: note.created_at,
+          });
+        });
+      });
+
+      return [...deduped.values()].slice(0, 5);
+    },
+    [recentAnalyzedVoiceNotes],
+  );
+
+  const nextItems = useMemo(() => buildInsightItems("action"), [buildInsightItems]);
+  const decisionItems = useMemo(
+    () => buildInsightItems("decision"),
+    [buildInsightItems],
+  );
   const recentPages = useMemo(() => memories.slice(0, 4), [memories]);
+  const visibleInsightItems =
+    activeInsightTab === "action" ? nextItems : decisionItems;
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-5 px-5 py-5 sm:px-8 lg:px-10 lg:py-6">
@@ -431,6 +506,71 @@ function LandingView({
           </div>
         </section>
       </div>
+
+      <section className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <SectionLabel icon={<Sparkles size={14} />}>
+            Voice Insight Board
+          </SectionLabel>
+          <div className="inline-flex rounded-full border border-(--line) bg-(--surface-soft) p-1">
+            <button
+              type="button"
+              onClick={() => setActiveInsightTab("action")}
+              className={`rounded-full px-4 py-2 text-sm transition ${
+                activeInsightTab === "action"
+                  ? "bg-(--surface) text-foreground shadow-sm"
+                  : "text-(--muted) hover:text-foreground"
+              }`}
+            >
+              What to do next
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveInsightTab("decision")}
+              className={`rounded-full px-4 py-2 text-sm transition ${
+                activeInsightTab === "decision"
+                  ? "bg-(--surface) text-foreground shadow-sm"
+                  : "text-(--muted) hover:text-foreground"
+              }`}
+            >
+              What I decided
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {visibleInsightItems.length > 0 ? (
+            visibleInsightItems.map((item) => (
+              <button
+                type="button"
+                key={`${item.kind}:${item.normalizedText}`}
+                onClick={() =>
+                  onSelectVoiceInsight(item.pageId, item.voiceNoteId)
+                }
+                className="flex w-full items-start justify-between gap-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-4 text-left transition hover:bg-(--surface)"
+              >
+                <div className="min-w-0">
+                  <div className="text-base font-medium text-foreground">
+                    {item.text}
+                  </div>
+                  <div className="mt-2 truncate text-sm text-(--muted)">
+                    On {item.pageTitle}
+                  </div>
+                </div>
+                <span className="shrink-0 text-xs text-(--muted)">
+                  {formatTimestamp(item.createdAt)}
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="rounded-xl border border-dashed border-(--line) bg-(--surface-soft) px-5 py-8 text-sm text-(--muted)">
+              {activeInsightTab === "action"
+                ? "No next steps captured yet."
+                : "No decisions captured yet."}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -770,6 +910,16 @@ export default function Dashboard() {
       finishPlayback();
     },
     [playingVoiceNoteId],
+  );
+
+  const handleSelectVoiceInsight = useCallback(
+    (pageId: string, voiceNoteId: string) => {
+      setSelectedMemoryId(pageId);
+      setExpandedVoiceNoteIds((current) =>
+        current.includes(voiceNoteId) ? current : [...current, voiceNoteId],
+      );
+    },
+    [],
   );
 
   useEffect(() => {
@@ -1407,6 +1557,7 @@ export default function Dashboard() {
               isLoadingBriefing={isLoadingBriefing}
               memories={memories}
               onSelectMemory={setSelectedMemoryId}
+              onSelectVoiceInsight={handleSelectVoiceInsight}
               onPlayVoiceNote={handlePlayVoiceNote}
               playingVoiceNoteId={playingVoiceNoteId}
             />
