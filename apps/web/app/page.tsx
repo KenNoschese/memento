@@ -31,7 +31,7 @@ type MemoriesResponse = {
   memories: PageMemoryRecord[];
 };
 
-const SIDEBAR_MIN_WIDTH = 300;
+const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 460;
 const SIDEBAR_DEFAULT_WIDTH = 384;
 const SIDEBAR_COLLAPSED_WIDTH = 84;
@@ -62,32 +62,55 @@ function SectionLabel({
 function SidebarFilterButton({
   active,
   onClick,
+  onDrop,
   icon,
   children,
 }: {
   active: boolean;
   onClick: () => void;
+  onDrop?: () => void;
   icon: ReactNode;
   children: ReactNode;
 }) {
+  const [isOver, setIsOver] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+
   return (
     <button
       type="button"
       onClick={onClick}
+      onDragOver={(e) => {
+        if (onDrop) {
+          e.preventDefault();
+          setIsOver(true);
+        }
+      }}
+      onDragLeave={() => setIsOver(false)}
+      onDrop={(e) => {
+        if (onDrop) {
+          e.preventDefault();
+          setIsOver(false);
+          onDrop();
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 2000);
+        }
+      }}
       className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
-        active
+        active || isOver || showSuccess
           ? "bg-(--surface) text-foreground ring-1 ring-(--accent-edge)"
           : "text-(--muted) hover:bg-(--surface) hover:text-foreground"
+      } ${isOver ? "scale-[1.02] shadow-sm" : ""} ${
+        showSuccess ? "ring-(--accent)" : ""
       }`}
     >
       <span
-        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${
-          active
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+          active || showSuccess
             ? "bg-(--accent-soft) text-(--accent)"
             : "bg-(--surface-soft) text-(--muted-strong)"
         }`}
       >
-        {icon}
+        {showSuccess ? <Check size={16} /> : icon}
       </span>
       <span className="truncate">{children}</span>
     </button>
@@ -101,18 +124,27 @@ function MemoryListItem({
   deleting,
   onSelect,
   onDelete,
+  onDragStart,
+  onDragEnd,
+  isDragging,
 }: {
   memory: PageMemoryRecord;
   selected: boolean;
   highlighted: boolean;
   deleting: boolean;
+  isDragging?: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   return (
     <div
       role="button"
       tabIndex={0}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -124,7 +156,9 @@ function MemoryListItem({
         selected
           ? "border-(--accent-edge) bg-(--surface) shadow-sm"
           : "border-transparent bg-transparent hover:border-(--line) hover:bg-(--surface)"
-      } ${highlighted ? "opacity-100" : "opacity-45"}`}
+      } ${highlighted ? "opacity-100" : "opacity-45"} ${
+        isDragging ? "opacity-25" : ""
+      }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -282,45 +316,55 @@ function LandingView({
         className="flex-1 overflow-y-auto pb-32 pr-6 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--line) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted)"
         style={{ scrollbarColor: "var(--line) transparent" }}
       >
-        <section className="mb-8 rounded-2xl border border-(--line) bg-(--surface) px-6 py-6 shadow-sm sm:px-8 sm:py-7">
+        <section className="group mb-8 overflow-hidden rounded-2xl border border-(--line) bg-(--surface) px-6 py-5 shadow-sm transition-all duration-300 sm:px-8">
           <div className="flex flex-col items-start">
-            <SectionLabel icon={<Sparkles size={14} />}>
-              Daily Briefing
-            </SectionLabel>
-            {isLoadingBriefing ? (
-              <div className="mt-4 flex items-center gap-3 text-(--muted)">
-                <Loader2 size={18} className="animate-spin" />
-                <span className="text-base">
-                  Synthesizing your recent activity...
-                </span>
-              </div>
-            ) : (
-              <div className="mt-4">
-                <p className="max-w-3xl text-balance text-lg leading-7 text-(--foreground-soft) sm:text-[1.1rem]">
-                  {briefing.summary ||
-                    "You haven&apos;t captured any memories yet today."}
-                </p>
-                {briefing.recentUrls.length > 0 && (
-                  <div className="mt-5 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        briefing.recentUrls.forEach((url) =>
-                          window.open(url, "_blank", "noopener,noreferrer"),
-                        )
-                      }
-                      className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
-                    >
-                      <ExternalLink size={15} />
-                      Resume work
-                    </button>
-                    <div className="rounded-full border border-(--line) bg-(--surface-soft) px-4 py-3 text-sm text-(--muted)">
-                      {memories.length} memories captured
-                    </div>
+            <div className="flex w-full items-center justify-between">
+              <SectionLabel icon={<Sparkles size={14} />}>
+                Daily Briefing
+              </SectionLabel>
+              <ChevronDown
+                size={14}
+                className="text-(--muted) transition-transform duration-300 group-hover:rotate-180"
+              />
+            </div>
+            <div className="grid grid-rows-[0fr] transition-all duration-300 group-hover:mt-4 group-hover:grid-rows-[1fr]">
+              <div className="overflow-hidden">
+                {isLoadingBriefing ? (
+                  <div className="flex items-center gap-3 py-2 text-(--muted)">
+                    <Loader2 size={18} className="animate-spin" />
+                    <span className="text-base">
+                      Synthesizing your recent activity...
+                    </span>
+                  </div>
+                ) : (
+                  <div className="pb-2">
+                    <p className="text-lg leading-7 text-(--foreground-soft) sm:text-[1.1rem]">
+                      {briefing.summary ||
+                        "You haven&apos;t captured any memories yet today."}
+                    </p>
+                    {briefing.recentUrls.length > 0 && (
+                      <div className="mt-5 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            briefing.recentUrls.forEach((url) =>
+                              window.open(url, "_blank", "noopener,noreferrer"),
+                            )
+                          }
+                          className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
+                        >
+                          <ExternalLink size={15} />
+                          Resume work
+                        </button>
+                        <div className="rounded-full border border-(--line) bg-(--surface-soft) px-4 py-3 text-sm text-(--muted)">
+                          {memories.length} memories captured
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
+            </div>
           </div>
         </section>
 
@@ -468,6 +512,7 @@ export default function Dashboard() {
     { role: "user" | "assistant"; content: string; sources?: PageMemoryRecord[] }[]
   >([]);
   const [isSendingChat, setIsSendingChat] = useState(false);
+  const [draggedMemoryId, setDraggedMemoryId] = useState<string | null>(null);
   const [playingVoiceNoteId, setPlayingVoiceNoteId] = useState<string | null>(
     null,
   );
@@ -1033,6 +1078,11 @@ export default function Dashboard() {
                           setSelectedFolderId(null);
                           setSelectedTag(null);
                         }}
+                        onDrop={() => {
+                          if (draggedMemoryId) {
+                            void handleMoveToFolder(draggedMemoryId, null);
+                          }
+                        }}
                         icon={<FolderIcon size={16} />}
                       >
                         All memories
@@ -1044,6 +1094,14 @@ export default function Dashboard() {
                           onClick={() => {
                             setSelectedFolderId(folder.id);
                             setSelectedTag(null);
+                          }}
+                          onDrop={() => {
+                            if (draggedMemoryId) {
+                              void handleMoveToFolder(
+                                draggedMemoryId,
+                                folder.id,
+                              );
+                            }
                           }}
                           icon={<FolderIcon size={16} />}
                         >
@@ -1134,6 +1192,7 @@ export default function Dashboard() {
                             selected={selected}
                             highlighted={highlighted}
                             deleting={deletingMemoryId === memory.id}
+                            isDragging={draggedMemoryId === memory.id}
                             onSelect={() => setSelectedMemoryId(memory.id)}
                             onDelete={() =>
                               void handleDeleteMemory(
@@ -1141,6 +1200,8 @@ export default function Dashboard() {
                                 memory.title?.trim() || "memory",
                               )
                             }
+                            onDragStart={() => setDraggedMemoryId(memory.id)}
+                            onDragEnd={() => setDraggedMemoryId(null)}
                           />
                         );
                       })}

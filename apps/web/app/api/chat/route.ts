@@ -75,9 +75,74 @@ export async function POST(req: Request) {
     }
 
     // 3. Format context for Groq
-    const sources: PageMemoryRecord[] = matches || [];
     
-    // We need to fetch attached voice notes for these sources to provide better context
+    // Group search hits by parent page for better organization
+    const groupedMatchIds = new Set<string>();
+    for (const match of (matches || [])) {
+      const pageId = match.parent_memory_id ?? match.id;
+      groupedMatchIds.add(pageId);
+    }
+    const pageIds = Array.from(groupedMatchIds);
+
+    // Fetch full records for these pages (including folder_id, tags, etc.)
+    const { data: fullPages, error: pagesError } = await supabase
+      .from("memories")
+      .select("*")
+      .eq("type", "page")
+      .eq("user_id", resolvedUserId)
+      .in("id", pageIds);
+
+    if (pagesError) {
+      console.error("Chat API: Error fetching full pages:", pagesError.message);
+      throw pagesError;
+    }
+
+    const sources: PageMemoryRecord[] = (fullPages || []).map(p => ({
+      ...p,
+      voiceNotes: [] // Will be populated below
+    }));
+
+    // Fetch Workspace Summary: All folders with item counts
+    const { data: workspaceFolders } = await supabase
+      .from("folders")
+      .select("id, name")
+      .eq("user_id", resolvedUserId);
+    
+    const folderCounts: Record<string, number> = {};
+    if (workspaceFolders) {
+      const { data: allMemoriesWithFolders } = await supabase
+        .from("memories")
+        .select("folder_id")
+        .eq("user_id", resolvedUserId)
+        .not("folder_id", "is", null);
+      
+      (allMemoriesWithFolders || []).forEach(m => {
+        if (m.folder_id) folderCounts[m.folder_id] = (folderCounts[m.folder_id] || 0) + 1;
+      });
+    }
+
+    // Fetch all unique tags across the workspace
+    const { data: tagData } = await supabase
+      .from("memories")
+      .select("tags")
+      .eq("user_id", resolvedUserId)
+      .not("tags", "is", null);
+    
+    const allTags = new Set<string>();
+    (tagData || []).forEach(m => m.tags?.forEach(t => allTags.add(t)));
+
+    const workspaceSummary = {
+      folders: (workspaceFolders || []).map(f => ({
+        name: f.name,
+        count: folderCounts[f.id] || 0
+      })),
+      tags: Array.from(allTags)
+    };
+
+    const foldersMap = new Map<string, string>();
+    (workspaceFolders || []).forEach(f => foldersMap.set(f.id, f.name));
+
+    // Fetch attached voice notes
     const sourceIds = sources.map(s => s.id);
     const { data: voiceNotesData } = await supabase
       .from("memories")
@@ -94,6 +159,7 @@ export async function POST(req: Request) {
     });
 
     const contextParts = sources.map((source, idx) => {
+      const folderName = source.folder_id ? foldersMap.get(source.folder_id) : "None (Unorganized)";
       const notes = voiceNotesMap.get(source.id) || [];
       const notesContext = notes.map(n => {
         const analysis = normalizeVoiceNoteAnalysis(n.analysis);
@@ -103,30 +169,43 @@ export async function POST(req: Request) {
       return `[Source ${idx + 1}]
 Title: ${source.title}
 URL: ${source.url}
+Folder: ${folderName}
 Summary: ${source.summary}
-Content: ${source.content?.substring(0, 1000)}...
-${notesContext ? "Attached Notes:\n" + notesContext : ""}`;
+Content: ${source.content?.substring(0, 1200)}...
+${notesContext ? "Attached Voice Notes for this page:\n" + notesContext : "No voice notes for this page."}`;
     }).join("\n\n---\n\n");
+
+    const currentDate = new Date().toLocaleDateString();
 
     // 4. Call Groq for synthesized answer
     const prompt = `You are Memento, an AI assistant that answers questions based ONLY on the user's browsing history and voice notes.
       
-CONTEXT:
+CURRENT DATE: ${currentDate}
+
+USER WORKSPACE STRUCTURE (Folders & Tags):
+- Folders: ${workspaceSummary.folders.map(f => `${f.name} (${f.count} items)`).join(", ") || "No folders created."}
+- Tags: ${workspaceSummary.tags.join(", ") || "No tags generated."}
+
+CONTEXT (Relevant Memories from Search):
 ${contextParts || "No relevant memories found."}
 
 USER QUESTION: ${query}
 
 INSTRUCTIONS:
-1. Answer the user's question using ONLY the information in the CONTEXT above.
-2. If the answer is not in the context, say "I couldn't find that in your recent browsing history." Do not guess.
-3. Be concise and conversational.
-4. If there are voice notes, mention "you left a voice note saying..."
-5. Always cite your sources at the end of your answer using the provided URLs.`;
+1. Answer the user's question using ONLY the information in the CONTEXT and USER WORKSPACE STRUCTURE above.
+2. If the user asks about a specific folder or what is "in" it, use the WORKSPACE STRUCTURE to confirm if the folder exists and how many items are in it.
+3. If the search results (CONTEXT) don't show the items for a folder the user mentioned, explain that you can see the folder exists in their workspace but the specific items weren't retrieved in the top 10 search results.
+4. If the answer is not in the context, say "I couldn't find that in your recent browsing history." Do not guess.
+5. Be concise and conversational.
+6. Always cite your sources at the end of your answer using the provided URLs.`;
 
     const chatCompletion = await groq.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: "You are a precise assistant grounded in the Memento application. You can see the user's entire workspace structure (folders and tags) as well as specific search results." },
+        { role: "user", content: prompt }
+      ],
       model: CHAT_MODEL,
-      temperature: 0.1,
+      temperature: 0, 
     });
 
     const answer = chatCompletion.choices[0]?.message?.content || "I'm sorry, I couldn't generate an answer.";
