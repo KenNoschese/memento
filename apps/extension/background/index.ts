@@ -1,5 +1,9 @@
 export {}
 
+import { Storage } from "@plasmohq/storage"
+
+import { getApiBaseUrl } from "../config"
+
 // Show INIT badge to confirm service worker is running
 chrome.runtime.onInstalled.addListener(() => {
   chrome.action.setBadgeText({ text: "LOAD" })
@@ -36,8 +40,6 @@ const isUrlBlocked = (rawUrl?: string) => {
   }
 }
 
-import { Storage } from "@plasmohq/storage"
-
 const storage = new Storage()
 
 // Unified Message Listener
@@ -58,6 +60,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.action.setBadgeText({ text: "ERR" })
     setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3000)
     void teardownOffscreen()
+  } else if (message.type === "index-page") {
+    void (async () => {
+      try {
+        const apiBaseUrl = await getApiBaseUrl()
+        let userId = await storage.get<string>("memento_user_id")
+
+        if (!userId) {
+          userId = `user-${crypto.randomUUID().slice(0, 8)}`
+          await storage.set("memento_user_id", userId)
+        }
+
+        const response = await fetch(`${apiBaseUrl}/api/index`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            url: message.payload?.url,
+            title: message.payload?.title,
+            content: message.payload?.content,
+            memento_user_id: userId
+          })
+        })
+
+        sendResponse({
+          ok: response.ok,
+          status: response.status
+        })
+      } catch (error) {
+        console.error("Background: Page indexing failed:", error)
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unknown error"
+        })
+      }
+    })()
+
+    return true
   }
 })
 

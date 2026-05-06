@@ -281,7 +281,7 @@ INSTRUCTIONS:
 3. If the search results (CONTEXT) don't show the items for a folder the user mentioned, explain that you can see the folder exists in their workspace but the specific items weren't retrieved in the top search results.
 4. If the answer is not in the context, say "I couldn't find that in your recent browsing history." Do not guess.
 5. Be concise and conversational.
-6. Always cite your sources at the end of your answer using the provided URLs.`;
+6. Do not include source lists, URLs, footnotes, or citations in the answer text. The UI will show sources separately.`;
 
     const conversationTranscript = (history || [])
       .map(

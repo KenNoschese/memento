@@ -1,8 +1,6 @@
 import { Readability } from "@mozilla/readability"
 import { Storage } from "@plasmohq/storage"
 
-import { getApiBaseUrl } from "../config"
-
 const storage = new Storage()
 
 // Prevent duplicate indexing runs for the same page
@@ -162,7 +160,6 @@ const extractAndSend = async () => {
       console.log("Memento: Content extracted. Title:", article.title)
 
       // 2. Send to API (Communication to Next.js backend)
-      const apiBaseUrl = await getApiBaseUrl()
       let userId = await storage.get<string>("memento_user_id")
 
       // Fallback: If we don't have a userId yet, generate a stable one for this extension
@@ -172,23 +169,23 @@ const extractAndSend = async () => {
         console.log("Memento: Generated new stable userId:", userId)
       }
 
-      const response = await fetch(`${apiBaseUrl}/api/index`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
+      const response = await chrome.runtime.sendMessage({
+        target: "background",
+        type: "index-page",
+        payload: {
           url: window.location.href,
           title: article.title,
-          content: article.textContent,
-          memento_user_id: userId
-        })
+          content: article.textContent
+        }
       })
 
-      if (response.ok) {
+      if (response?.ok) {
         console.log("Memento: Successfully indexed page.")
       } else {
-        console.error("Memento: API returned error status:", response.status)
+        console.error(
+          "Memento: Background indexing returned error:",
+          response?.status ?? response?.error ?? "unknown"
+        )
       }
     } else {
       console.warn(

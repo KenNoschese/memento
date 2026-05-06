@@ -3,9 +3,11 @@ import { NextResponse } from "next/server";
 import { getErrorMessage } from "@/app/lib/errors";
 import type {
   PageMemoryRecord,
+  ThreadSummary,
   VoiceNoteRecord,
 } from "@/app/lib/types";
 import { normalizeVoiceNoteAnalysis } from "@/app/lib/voice-note-analysis";
+import { buildThreadMetadata } from "@/app/lib/workflow";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -135,7 +137,31 @@ export async function GET(req: Request) {
       voiceNotes: voiceNotesByPageId.get(memory.id) ?? [],
     }));
 
-    return NextResponse.json({ memories }, { headers: corsHeaders });
+    const folderNamesById = new Map<string, string>();
+    if (userId) {
+      const { data: folderData, error: folderError } = await supabase
+        .from("folders")
+        .select("id, name")
+        .eq("user_id", userId);
+
+      if (folderError) {
+        throw folderError;
+      }
+
+      for (const folder of folderData ?? []) {
+        folderNamesById.set(folder.id, folder.name);
+      }
+    }
+
+    const threaded = buildThreadMetadata(memories, folderNamesById);
+
+    return NextResponse.json(
+      {
+        memories: threaded.memories,
+        threads: threaded.threads satisfies ThreadSummary[],
+      },
+      { headers: corsHeaders },
+    );
   } catch (error: unknown) {
     const message = getErrorMessage(error);
     return NextResponse.json(
