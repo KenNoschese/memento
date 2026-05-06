@@ -61,7 +61,14 @@ export async function POST(req: Request) {
 
     const { data, error } = await supabase
       .from("folders")
-      .insert([{ name: name.trim(), user_id: resolvedUserId }])
+      .insert([
+        {
+          name: name.trim(),
+          user_id: resolvedUserId,
+          source: "manual",
+          auto_key: null,
+        },
+      ])
       .select()
       .single();
 

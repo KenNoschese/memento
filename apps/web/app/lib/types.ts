@@ -31,6 +31,8 @@ export type Folder = {
   id: string;
   name: string;
   created_at: string;
+  source?: "manual" | "auto";
+  auto_key?: string | null;
 };
 
 export type VoiceNoteRecord = BaseMemoryRecord & {
@@ -64,7 +66,11 @@ export type ThreadSummary = {
   actionItemCount: number;
   tags: string[];
   folderName: string | null;
+  folderSource?: "manual" | "auto" | null;
   representativeSummary: string;
+  suggestedFolderName?: string | null;
+  autoFolderConfidence?: number;
+  eligibleForAutoFolder?: boolean;
 };
 
 export type PageMemoryRecord = BaseMemoryRecord & {

@@ -179,6 +179,7 @@ Main files:
 - The current UI is a two-pane layout:
   - left pane: briefing, search, page list
   - right pane: selected page details with attached voice notes
+- The memories backend also derives lightweight work threads and may auto-create high-confidence folders for unorganized memories.
 
 Main files:
 - `apps/web/app/api/memories/route.ts`
@@ -207,6 +208,9 @@ Main files:
   - `is_placeholder` (page anchor created before page indexing completes)
   - `dedupe_key`
   - `created_at`
+- Folder records support both manual and automatic organization via:
+  - `source` (`manual` or `auto`)
+  - `auto_key` (stable dedupe key for auto-created folders)
 
 ### Important Guidance
 - When changing schema, RPCs, or policies, provide exact SQL.
