@@ -74,6 +74,7 @@ Do not move secrets or direct model calls into the extension.
 ### Current Model Usage
 - **Embeddings:** Gemini `gemini-embedding-001`
 - **Voice transcription:** Groq `whisper-large-v3-turbo`
+- **Voice note analysis:** Groq `llama-3.1-8b-instant` via `GROQ_VOICE_ANALYSIS_MODEL`
 - **Briefing/summarization:** Groq `llama-3.1-8b-instant` (chosen for its higher free-tier rate limits)
 
 ---
@@ -119,6 +120,7 @@ Expected variables include:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
+- `GROQ_VOICE_ANALYSIS_MODEL` (optional override for transcript analysis)
 - `GROQ_BRIEFING_MODEL` (optional override)
 
 ### Rules
@@ -145,7 +147,7 @@ Main files:
 2. It creates or reuses an offscreen document.
 3. The offscreen page records microphone audio.
 4. The offscreen page uploads the recording plus active tab URL/title to `apps/web/app/api/voice/route.ts`.
-5. The web app transcribes with Groq Whisper, resolves or creates the canonical page memory, embeds with Gemini, and stores the voice note as a child memory in Supabase.
+5. The web app transcribes with Groq Whisper, resolves or creates the canonical page memory, embeds with Gemini, analyzes the transcript with Groq, and stores the voice note as a child memory in Supabase.
 
 Main files:
 - `apps/extension/background/index.ts`
@@ -197,6 +199,7 @@ Main files:
   - `title`
   - `content`
   - `summary` (default readable recap for dashboard rendering)
+  - `analysis` (JSON transcript insights for voice notes: action items, decisions, page context, model metadata)
   - `audio` (Base64 string for voice notes)
   - `embedding` (vector(3072))
   - `type`

@@ -52,7 +52,7 @@ function SectionLabel({
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+    <div className="flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
       {icon}
       <span>{children}</span>
     </div>
@@ -76,15 +76,15 @@ function SidebarFilterButton({
       onClick={onClick}
       className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
         active
-          ? "bg-[var(--surface)] text-[var(--foreground)] ring-1 ring-[var(--accent-edge)]"
-          : "text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+          ? "bg-(--surface) text-foreground ring-1 ring-(--accent-edge)"
+          : "text-(--muted) hover:bg-(--surface) hover:text-foreground"
       }`}
     >
       <span
         className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${
           active
-            ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-            : "bg-[var(--surface-soft)] text-[var(--muted-strong)]"
+            ? "bg-(--accent-soft) text-(--accent)"
+            : "bg-(--surface-soft) text-(--muted-strong)"
         }`}
       >
         {icon}
@@ -122,16 +122,16 @@ function MemoryListItem({
       }}
       className={`group rounded-xl border px-4 py-4 text-left transition ${
         selected
-          ? "border-[var(--accent-edge)] bg-[var(--surface)] shadow-sm"
-          : "border-transparent bg-transparent hover:border-[var(--line)] hover:bg-[var(--surface)]"
+          ? "border-(--accent-edge) bg-(--surface) shadow-sm"
+          : "border-transparent bg-transparent hover:border-(--line) hover:bg-(--surface)"
       } ${highlighted ? "opacity-100" : "opacity-45"}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate font-medium text-[var(--foreground)]">
+          <div className="truncate font-medium text-foreground">
             {memory.title?.trim() || "Untitled"}
           </div>
-          <div className="mt-1 line-clamp-2 text-sm leading-6 text-[var(--muted)]">
+          <div className="mt-1 line-clamp-2 text-sm leading-6 text-(--muted)">
             {memory.summary?.trim() || memory.content?.trim() || memory.url}
           </div>
         </div>
@@ -144,8 +144,8 @@ function MemoryListItem({
           aria-label={`Delete ${memory.title?.trim() || "memory"}`}
           className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition ${
             selected
-              ? "border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]"
-              : "border-transparent bg-transparent text-[var(--muted)] opacity-0 group-hover:opacity-100 hover:border-[var(--line)] hover:bg-[var(--surface)]"
+              ? "border-(--line) bg-(--surface) text-(--muted) hover:text-foreground"
+              : "border-transparent bg-transparent text-(--muted) opacity-0 group-hover:opacity-100 hover:border-(--line) hover:bg-(--surface)"
           } ${deleting ? "pointer-events-none opacity-100" : ""}`}
         >
           {deleting ? (
@@ -156,9 +156,9 @@ function MemoryListItem({
         </button>
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3 text-xs text-[var(--muted)]">
+      <div className="mt-4 flex items-center justify-between gap-3 text-xs text-(--muted)">
         <span>{formatTimestamp(memory.created_at)}</span>
-        <span className="rounded-full bg-[var(--surface-soft)] px-2.5 py-1 text-[var(--muted-strong)]">
+        <span className="rounded-full bg-(--surface-soft) px-2.5 py-1 text-(--muted-strong)">
           {memory.voiceNotes.length} voice note
           {memory.voiceNotes.length === 1 ? "" : "s"}
         </span>
@@ -183,16 +183,16 @@ function VoiceQuoteCard({
   isPlaying: boolean;
 }) {
   return (
-    <article className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm">
+    <article className="rounded-xl border border-(--line) bg-(--surface) p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+        <span className="text-xs uppercase tracking-[0.18em] text-(--muted)">
           {formatTimestamp(note.created_at)}
         </span>
         <button
           type="button"
           onClick={() => onPlay(note)}
           disabled={isPlaying}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--accent-edge)] bg-[var(--accent-soft)] text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-(--accent-edge) bg-(--accent-soft) text-(--accent) transition hover:bg-(--accent) hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
         >
           {isPlaying ? (
             <Loader2 size={14} className="animate-spin" />
@@ -201,13 +201,18 @@ function VoiceQuoteCard({
           )}
         </button>
       </div>
-      <p className="mt-4 text-base leading-7 text-[var(--foreground)]">
-        “{note.content}”
+      <p className="mt-4 text-base leading-7 text-foreground">
+        “{note.summary?.trim() || note.content || "No transcript available."}”
       </p>
+      {note.analysis?.action_items.length ? (
+        <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3 text-sm text-(--foreground-soft)">
+          Next: {note.analysis.action_items[0]}
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={() => onSelectMemory(pageId)}
-        className="mt-5 inline-flex w-full min-w-0 items-center gap-2 text-sm text-[var(--accent)] transition hover:text-[var(--accent-strong)]"
+        className="mt-5 inline-flex w-full min-w-0 items-center gap-2 text-sm text-(--accent) transition hover:text-(--accent-strong)"
       >
         <span className="truncate">On {pageTitle}</span>
         <ExternalLink size={14} className="shrink-0" />
@@ -232,13 +237,13 @@ function FolderPicker({
         onChange(nextValue === "__none__" ? null : nextValue)
       }
     >
-      <Select.Trigger className="inline-flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] py-2.5 pl-4 pr-10 text-sm text-[var(--muted)] shadow-sm transition hover:border-[var(--accent-edge)] hover:text-[var(--foreground)] data-[state=open]:border-[var(--accent-edge)]">
-        <FolderIcon size={15} className="text-[var(--muted-strong)]" />
+      <Select.Trigger className="inline-flex items-center gap-3 rounded-2xl border border-(--line) bg-(--surface) py-2.5 pl-4 pr-10 text-sm text-(--muted) shadow-sm transition hover:border-(--accent-edge) hover:text-foreground data-[state=open]:border-(--accent-edge)">
+        <FolderIcon size={15} className="text-(--muted-strong)" />
         <Select.Value
           placeholder="No Folder"
-          className="min-w-34 text-left text-sm font-medium text-[var(--foreground)]"
+          className="min-w-34 text-left text-sm font-medium text-foreground"
         />
-        <Select.Icon className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted)]">
+        <Select.Icon className="absolute right-4 top-1/2 -translate-y-1/2 text-(--muted)">
           <ChevronDown size={15} />
         </Select.Icon>
       </Select.Trigger>
@@ -248,14 +253,14 @@ function FolderPicker({
           position="popper"
           sideOffset={8}
           align="end"
-          className="z-30 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[0_12px_30px_rgba(38,33,28,0.12)]"
+          className="z-30 min-w-(--radix-select-trigger-width) overflow-hidden rounded-2xl border border-(--line) bg-(--surface) p-1.5 shadow-[0_12px_30px_rgba(38,33,28,0.12)]"
         >
           <Select.Viewport>
             <Select.Item
               value="__none__"
-              className="relative flex cursor-default items-center rounded-xl py-2.5 pl-9 pr-3 text-sm text-[var(--foreground-soft)] outline-none transition data-[highlighted]:bg-[var(--surface-soft)] data-[highlighted]:text-[var(--foreground)] data-[state=checked]:bg-[var(--accent-soft)] data-[state=checked]:text-[var(--accent)]"
+              className="relative flex cursor-default items-center rounded-xl py-2.5 pl-9 pr-3 text-sm text-(--foreground-soft) outline-none transition data-highlighted:bg-(--surface-soft) data-highlighted:text-foreground data-checked:bg-(--accent-soft) data-checked:text-(--accent)"
             >
-              <Select.ItemIndicator className="absolute left-3 inline-flex items-center text-[var(--accent)]">
+              <Select.ItemIndicator className="absolute left-3 inline-flex items-center text-(--accent)">
                 <Check size={14} />
               </Select.ItemIndicator>
               <Select.ItemText>No Folder</Select.ItemText>
@@ -265,9 +270,9 @@ function FolderPicker({
               <Select.Item
                 key={folder.id}
                 value={folder.id}
-                className="relative mt-1 flex cursor-default items-center rounded-xl py-2.5 pl-9 pr-3 text-sm text-[var(--foreground-soft)] outline-none transition data-[highlighted]:bg-[var(--surface-soft)] data-[highlighted]:text-[var(--foreground)] data-[state=checked]:bg-[var(--accent-soft)] data-[state=checked]:text-[var(--accent)]"
+                className="relative mt-1 flex cursor-default items-center rounded-xl py-2.5 pl-9 pr-3 text-sm text-(--foreground-soft) outline-none transition data-highlighted:bg-(--surface-soft) data-highlighted:text-foreground data-checked:bg-(--accent-soft) data-checked:text-(--accent)"
               >
-                <Select.ItemIndicator className="absolute left-3 inline-flex items-center text-[var(--accent)]">
+                <Select.ItemIndicator className="absolute left-3 inline-flex items-center text-(--accent)">
                   <Check size={14} />
                 </Select.ItemIndicator>
                 <Select.ItemText>{folder.name}</Select.ItemText>
@@ -296,8 +301,10 @@ function LandingView({
   playingVoiceNoteId: string | null;
 }) {
   const recentVoiceNotes = useMemo(() => {
-    const allNotes: (VoiceNoteRecord & { pageTitle: string; pageId: string })[] =
-      [];
+    const allNotes: (VoiceNoteRecord & {
+      pageTitle: string;
+      pageId: string;
+    })[] = [];
 
     memories.forEach((memory) => {
       memory.voiceNotes.forEach((note) => {
@@ -321,17 +328,21 @@ function LandingView({
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-5 px-5 py-5 sm:px-8 lg:px-10 lg:py-6">
-      <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-6 py-6 shadow-sm sm:px-8 sm:py-7">
+      <section className="rounded-2xl border border-(--line) bg-(--surface) px-6 py-6 shadow-sm sm:px-8 sm:py-7">
         <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-          <SectionLabel icon={<Sparkles size={14} />}>Daily Briefing</SectionLabel>
+          <SectionLabel icon={<Sparkles size={14} />}>
+            Daily Briefing
+          </SectionLabel>
           {isLoadingBriefing ? (
-            <div className="mt-4 flex items-center gap-3 text-[var(--muted)]">
+            <div className="mt-4 flex items-center gap-3 text-(--muted)">
               <Loader2 size={18} className="animate-spin" />
-              <span className="text-base">Synthesizing your recent activity...</span>
+              <span className="text-base">
+                Synthesizing your recent activity...
+              </span>
             </div>
           ) : (
             <>
-              <p className="mt-4 max-w-[44rem] text-balance text-lg leading-7 text-[var(--foreground-soft)] sm:text-[1.1rem]">
+              <p className="mt-4 max-w-176 text-balance text-lg leading-7 text-(--foreground-soft) sm:text-[1.1rem]">
                 {briefing.summary ||
                   "You haven&apos;t captured any memories yet today."}
               </p>
@@ -344,13 +355,13 @@ function LandingView({
                         window.open(url, "_blank", "noopener,noreferrer"),
                       )
                     }
-                    className="inline-flex items-center gap-2 rounded-full bg-[var(--foreground)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--foreground-soft)]"
+                    className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
                   >
                     <ExternalLink size={15} />
                     Resume work
                   </button>
                 ) : null}
-                <div className="rounded-full border border-[var(--line)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--muted)]">
+                <div className="rounded-full border border-(--line) bg-(--surface-soft) px-4 py-3 text-sm text-(--muted)">
                   {memories.length} page memories captured
                 </div>
               </div>
@@ -360,10 +371,12 @@ function LandingView({
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-sm">
+        <section className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <SectionLabel icon={<Brain size={14} />}>Recent Pages</SectionLabel>
-            <span className="text-sm text-[var(--muted)]">{recentPages.length} shown</span>
+            <span className="text-sm text-(--muted)">
+              {recentPages.length} shown
+            </span>
           </div>
           <div className="mt-4 space-y-3">
             {recentPages.length > 0 ? (
@@ -372,30 +385,30 @@ function LandingView({
                   type="button"
                   key={memory.id}
                   onClick={() => onSelectMemory(memory.id)}
-                  className="flex w-full items-start justify-between gap-4 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-4 py-4 text-left transition hover:bg-[var(--surface)]"
+                  className="flex w-full items-start justify-between gap-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-4 text-left transition hover:bg-(--surface)"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-base font-medium text-[var(--foreground)]">
+                    <div className="truncate text-base font-medium text-foreground)">
                       {memory.title || "Untitled"}
                     </div>
-                    <div className="mt-1 truncate text-sm text-[var(--muted)]">
+                    <div className="mt-1 truncate text-sm text-(--muted)">
                       {memory.url}
                     </div>
                   </div>
-                  <span className="text-xs text-[var(--muted)]">
+                  <span className="text-xs text-(--muted)">
                     {formatTimestamp(memory.created_at)}
                   </span>
                 </button>
               ))
             ) : (
-              <div className="rounded-xl border border-dashed border-[var(--line)] px-5 py-8 text-sm text-[var(--muted)]">
+              <div className="rounded-xl border border-dashed border-(--line) px-5 py-8 text-sm text-(--muted)">
                 No recent pages captured.
               </div>
             )}
           </div>
         </section>
 
-        <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-sm">
+        <section className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
           <SectionLabel icon={<Play size={14} />}>Voice Context</SectionLabel>
           <div className="mt-4 space-y-3">
             {recentVoiceNotes.length > 0 ? (
@@ -411,7 +424,7 @@ function LandingView({
                 />
               ))
             ) : (
-              <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--surface-soft)] px-5 py-8 text-sm text-[var(--muted)]">
+              <div className="rounded-xl border border-dashed border-(--line) bg-(--surface-soft) px-5 py-8 text-sm text-(--muted)">
                 No recent voice notes.
               </div>
             )}
@@ -609,7 +622,9 @@ export default function Dashboard() {
 
             next.push({
               ...page,
-              voiceNotes: page.voiceNotes.filter((note) => note.id !== memoryId),
+              voiceNotes: page.voiceNotes.filter(
+                (note) => note.id !== memoryId,
+              ),
               matchedVoiceNoteIds: page.matchedVoiceNoteIds?.filter(
                 (id) => id !== memoryId,
               ),
@@ -808,15 +823,17 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] lg:h-screen lg:overflow-hidden">
+    <div className="min-h-screen bg-background text-foreground lg:h-screen lg:overflow-hidden">
       <div className="flex min-h-screen flex-col lg:h-screen lg:flex-row">
         <aside
-          className="relative w-full shrink-0 border-b border-[var(--line)] bg-[var(--surface-soft)] lg:h-screen lg:w-[var(--sidebar-width)] lg:border-b-0 lg:border-r"
+          className="relative w-full shrink-0 border-b border-(--line) bg-(--surface-soft) lg:h-screen lg:w-(--sidebar-width) lg:border-b-0 lg:border-r"
           style={{ ["--sidebar-width" as string]: `${resolvedSidebarWidth}px` }}
         >
           <div
             className={`flex h-full flex-col pb-4 pt-5 ${
-              isSidebarCollapsed ? "px-3 sm:px-3 lg:px-3" : "px-4 sm:px-5 lg:px-6"
+              isSidebarCollapsed
+                ? "px-3 sm:px-3 lg:px-3"
+                : "px-4 sm:px-5 lg:px-6"
             }`}
           >
             <div
@@ -831,15 +848,15 @@ export default function Dashboard() {
                   isSidebarCollapsed ? "justify-center" : "gap-3"
                 }`}
               >
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--surface)] text-[var(--accent)] ring-1 ring-[var(--line)]">
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-(--surface) text-(--accent) ring-1 ring-(--line)">
                   <Brain size={19} />
                 </span>
                 {!isSidebarCollapsed ? (
                   <div>
-                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
+                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
                       Memory Browser
                     </div>
-                    <h1 className="font-serif text-2xl text-[var(--foreground)]">
+                    <h1 className="font-serif text-2xl text-foreground">
                       Memento
                     </h1>
                   </div>
@@ -847,13 +864,13 @@ export default function Dashboard() {
               </button>
               {!isSidebarCollapsed ? (
                 <div className="flex items-center gap-2">
-                  <div className="hidden rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs text-[var(--muted)] lg:block">
+                  <div className="hidden rounded-full border border-(--line) bg-(--surface) px-3 py-1.5 text-xs text-(--muted) lg:block">
                     {filteredMemories.length} pages
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsSidebarCollapsed(true)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-(--line) bg-(--surface) text-(--muted) transition hover:text-foreground"
                     aria-label="Collapse sidebar"
                   >
                     <ChevronsLeft size={16} />
@@ -867,7 +884,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setIsSidebarCollapsed(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-(--line) bg-(--surface) text-(--muted) transition hover:text-foreground"
                   aria-label="Expand sidebar"
                 >
                   <ChevronsRight size={16} />
@@ -879,13 +896,13 @@ export default function Dashboard() {
               <>
                 <form onSubmit={handleSearch} className="relative mt-6">
                   <Search
-                    className="pointer-events-none absolute left-4 top-3.5 text-[var(--muted)]"
+                    className="pointer-events-none absolute left-4 top-3.5 text-(--muted)"
                     size={18}
                   />
                   <input
                     type="text"
                     placeholder="Search your browsing memory"
-                    className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] py-3 pl-11 pr-11 text-sm outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+                    className="w-full rounded-xl border border-(--line) bg-(--surface) py-3 pl-11 pr-11 text-sm outline-none transition placeholder:text-(--muted) focus:border-(--accent)"
                     value={searchQuery}
                     onChange={(event) => {
                       const value = event.target.value;
@@ -897,20 +914,22 @@ export default function Dashboard() {
                   />
                   {isSearching ? (
                     <Loader2
-                      className="absolute right-4 top-3.5 animate-spin text-[var(--muted)]"
+                      className="absolute right-4 top-3.5 animate-spin text-(--muted)"
                       size={18}
                     />
                   ) : null}
                 </form>
- 
+
                 <div className="mt-6 flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
                   <section>
                     <div className="mb-3 flex items-center justify-between gap-2 px-1">
-                      <SectionLabel icon={<FolderIcon size={13} />}>Browse</SectionLabel>
+                      <SectionLabel icon={<FolderIcon size={13} />}>
+                        Browse
+                      </SectionLabel>
                       <button
                         type="button"
                         onClick={() => setIsCreatingFolder(!isCreatingFolder)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] transition hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-(--muted) transition hover:bg-(--surface) hover:text-foreground"
                         title="Create folder"
                       >
                         <Plus size={14} />
@@ -924,10 +943,13 @@ export default function Dashboard() {
                           type="text"
                           placeholder="New folder name"
                           value={newFolderName}
-                          onChange={(event) => setNewFolderName(event.target.value)}
-                          className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+                          onChange={(event) =>
+                            setNewFolderName(event.target.value)
+                          }
+                          className="w-full rounded-xl border border-(--line) bg-(--surface) px-4 py-3 text-sm outline-none focus:border-(--accent)"
                           onBlur={() => {
-                            if (!newFolderName.trim()) setIsCreatingFolder(false);
+                            if (!newFolderName.trim())
+                              setIsCreatingFolder(false);
                           }}
                         />
                       </form>
@@ -963,13 +985,17 @@ export default function Dashboard() {
                   <section>
                     <button
                       type="button"
-                      onClick={() => setIsSignalsExpanded((current) => !current)}
+                      onClick={() =>
+                        setIsSignalsExpanded((current) => !current)
+                      }
                       className="flex w-full items-center justify-between gap-3 px-1 text-left"
                     >
-                      <SectionLabel icon={<Tag size={13} />}>Signals</SectionLabel>
+                      <SectionLabel icon={<Tag size={13} />}>
+                        Signals
+                      </SectionLabel>
                       <ChevronDown
                         size={15}
-                        className={`text-[var(--muted)] transition ${
+                        className={`text-(--muted) transition ${
                           isSignalsExpanded ? "rotate-180" : ""
                         }`}
                       />
@@ -983,20 +1009,22 @@ export default function Dashboard() {
                                 type="button"
                                 key={tag}
                                 onClick={() => {
-                                  setSelectedTag(selectedTag === tag ? null : tag);
+                                  setSelectedTag(
+                                    selectedTag === tag ? null : tag,
+                                  );
                                   setSelectedFolderId(null);
                                 }}
                                 className={`rounded-full border px-3 py-1.5 text-xs transition ${
                                   selectedTag === tag
-                                    ? "border-[var(--accent-edge)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                                    : "border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-edge)] hover:text-[var(--foreground)]"
+                                    ? "border-(--accent-edge) bg-(--accent-soft) text-(--accent)"
+                                    : "border-(--line) bg-(--surface) text-(--muted) hover:border-(--accent-edge) hover:text-foreground"
                                 }`}
                               >
                                 {tag}
                               </button>
                             ))
                           ) : (
-                            <span className="px-1 text-sm text-[var(--muted)]">
+                            <span className="px-1 text-sm text-(--muted)">
                               No tags generated yet.
                             </span>
                           )}
@@ -1008,16 +1036,18 @@ export default function Dashboard() {
                   <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div className="mb-3 flex items-center justify-between gap-3 px-1">
                       <SectionLabel icon={<Brain size={13} />}>
-                        {highlightedIds.length > 0 ? "Matches" : "Memory Stream"}
+                        {highlightedIds.length > 0
+                          ? "Matches"
+                          : "Memory Stream"}
                       </SectionLabel>
-                      <span className="text-xs text-[var(--muted)]">
+                      <span className="text-xs text-(--muted)">
                         {highlightedIds.length > 0
                           ? `${highlightedIds.length} found`
                           : `${filteredMemories.length} total`}
                       </span>
                     </div>
                     <div
-                      className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--line)] hover:[&::-webkit-scrollbar-thumb]:bg-[var(--muted)]"
+                      className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--line) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted)"
                       style={{ scrollbarColor: "var(--line) transparent" }}
                     >
                       {filteredMemories.map((memory) => {
@@ -1055,7 +1085,7 @@ export default function Dashboard() {
                     setSelectedFolderId(null);
                     setSelectedTag(null);
                   }}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-(--line) bg-(--surface) text-(--muted) transition hover:text-foreground"
                   aria-label="Show all memories"
                 >
                   <FolderIcon size={18} />
@@ -1063,7 +1093,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setSelectedMemoryId(null)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-(--line) bg-(--surface) text-(--muted) transition hover:text-foreground"
                   aria-label="Open briefing"
                 >
                   <Brain size={18} />
@@ -1079,7 +1109,7 @@ export default function Dashboard() {
               onMouseDown={() => setIsResizingSidebar(true)}
               className="absolute inset-y-0 right-0 hidden w-2 translate-x-1/2 cursor-col-resize lg:block"
             >
-              <span className="absolute inset-y-8 left-1/2 w-px -translate-x-1/2 rounded-full bg-[var(--line)]" />
+              <span className="absolute inset-y-8 left-1/2 w-px -translate-x-1/2 rounded-full bg-(--line)" />
             </button>
           ) : null}
         </aside>
@@ -1087,24 +1117,24 @@ export default function Dashboard() {
         <main className="min-w-0 flex-1 lg:h-screen lg:overflow-y-auto">
           {selectedMemory ? (
             <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
-              <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-sm">
+              <section className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <SectionLabel icon={<Brain size={14} />}>
                       Page Memory
                       {selectedMemory.is_placeholder ? " Placeholder" : ""}
                     </SectionLabel>
-                    <h2 className="mt-4 max-w-3xl font-serif text-3xl leading-tight text-[var(--foreground)] sm:text-[2.45rem]">
+                    <h2 className="mt-4 max-w-3xl font-serif text-3xl leading-tight text-foreground sm:text-[2.45rem]">
                       {selectedMemory.title?.trim() || "Untitled"}
                     </h2>
-                    <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-[var(--muted)]">
+                    <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-(--muted)">
                       <span>{formatTimestamp(selectedMemory.created_at)}</span>
-                      <span className="hidden h-1 w-1 rounded-full bg-[var(--line)] sm:inline-block" />
+                      <span className="hidden h-1 w-1 rounded-full bg-(--line) sm:inline-block" />
                       <a
                         href={selectedMemory.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex min-w-0 items-center gap-2 text-[var(--accent)] transition hover:text-[var(--accent-strong)]"
+                        className="inline-flex min-w-0 items-center gap-2 text-(--accent) transition hover:text-(--accent-strong)"
                       >
                         <ExternalLink size={15} />
                         <span className="truncate">{selectedMemory.url}</span>
@@ -1115,7 +1145,7 @@ export default function Dashboard() {
                         {selectedMemory.tags?.map((tag) => (
                           <span
                             key={tag}
-                            className="rounded-full border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-1.5 text-xs text-[var(--muted-strong)]"
+                            className="rounded-full border border-(--line) bg-(--surface-soft) px-3 py-1.5 text-xs text-(--muted-strong)"
                           >
                             {tag}
                           </span>
@@ -1141,7 +1171,7 @@ export default function Dashboard() {
                         )
                       }
                       disabled={deletingMemoryId === selectedMemory.id}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--muted)] transition hover:border-[#cbd5e1] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-(--line) bg-(--surface) px-4 py-2.5 text-sm text-(--muted) transition hover:border-[#cbd5e1] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {deletingMemoryId === selectedMemory.id ? (
                         <Loader2 size={15} className="animate-spin" />
@@ -1155,20 +1185,22 @@ export default function Dashboard() {
               </section>
 
               <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(18rem,0.88fr)]">
-                <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-sm">
-                  <SectionLabel icon={<Sparkles size={14} />}>Page Summary</SectionLabel>
-                  <article className="mt-5 max-w-3xl whitespace-pre-wrap text-[1.02rem] leading-8 text-[var(--foreground-soft)]">
+                <section className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
+                  <SectionLabel icon={<Sparkles size={14} />}>
+                    Page Summary
+                  </SectionLabel>
+                  <article className="mt-5 max-w-3xl whitespace-pre-wrap text-[1.02rem] leading-8 text-(--foreground-soft)">
                     {selectedMemory.summary?.trim() ||
                       selectedMemory.content?.trim() ||
                       selectedMemory.url}
                   </article>
 
                   {selectedMemory.content?.trim() ? (
-                    <div className="mt-8 border-t border-[var(--line)] pt-5">
+                    <div className="mt-8 border-t border-(--line) pt-5">
                       <button
                         type="button"
                         onClick={() => toggleRawPageText(selectedMemory.id)}
-                        className="inline-flex items-center gap-2 text-sm text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                        className="inline-flex items-center gap-2 text-sm text-(--muted) transition hover:text-foreground"
                       >
                         <ChevronDown
                           size={16}
@@ -1183,7 +1215,7 @@ export default function Dashboard() {
                           : "Show extracted text"}
                       </button>
                       {showRawPageTextIds.includes(selectedMemory.id) ? (
-                        <div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-[var(--muted)]">
+                        <div className="mt-4 whitespace-pre-wrap text-sm leading-7 text-(--muted)">
                           {normalizeExtractedText(selectedMemory.content)}
                         </div>
                       ) : null}
@@ -1191,10 +1223,12 @@ export default function Dashboard() {
                   ) : null}
                 </section>
 
-                <aside className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-sm">
+                <aside className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
                   <div className="flex items-center justify-between gap-3">
-                    <SectionLabel icon={<Play size={14} />}>Voice Notes</SectionLabel>
-                    <span className="text-sm text-[var(--muted)]">
+                    <SectionLabel icon={<Play size={14} />}>
+                      Voice Notes
+                    </SectionLabel>
+                    <span className="text-sm text-(--muted)">
                       {selectedMemory.voiceNotes.length} total
                     </span>
                   </div>
@@ -1209,10 +1243,10 @@ export default function Dashboard() {
                         return (
                           <article
                             key={note.id}
-                            className={`rounded-xl border bg-[var(--surface)] p-4 transition ${
+                            className={`rounded-xl border bg-(--surface) p-4 transition ${
                               matched
-                                ? "border-[var(--accent-edge)] bg-[var(--accent-soft)]"
-                                : "border-[var(--line)]"
+                                ? "border-(--accent-edge) bg-(--accent-soft)"
+                                : "border-(--line)"
                             }`}
                           >
                             <div className="flex items-start justify-between gap-3">
@@ -1221,10 +1255,10 @@ export default function Dashboard() {
                                 onClick={() => toggleVoiceNote(note.id)}
                                 className="min-w-0 flex-1 text-left"
                               >
-                                <div className="text-sm font-medium text-[var(--foreground)]">
+                                <div className="text-sm font-medium text-foreground">
                                   Voice note
                                 </div>
-                                <div className="mt-1 text-xs text-[var(--muted)]">
+                                <div className="mt-1 text-xs text-(--muted)">
                                   {formatTimestamp(note.created_at)}
                                 </div>
                               </button>
@@ -1233,14 +1267,19 @@ export default function Dashboard() {
                                   type="button"
                                   onClick={() => handlePlayVoiceNote(note)}
                                   disabled={playingVoiceNoteId === note.id}
-                                  className="inline-flex items-center gap-2 rounded-full border border-[var(--accent-edge)] bg-[var(--accent-soft)] px-3 py-2 text-xs font-medium text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
+                                  className="inline-flex items-center gap-2 rounded-full border border-(--accent-edge) bg-(--accent-soft) px-3 py-2 text-xs font-medium text-(--accent) transition hover:bg-(--accent) hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
                                 >
                                   {playingVoiceNoteId === note.id ? (
-                                    <Loader2 size={13} className="animate-spin" />
+                                    <Loader2
+                                      size={13}
+                                      className="animate-spin"
+                                    />
                                   ) : (
                                     <Play size={13} fill="currentColor" />
                                   )}
-                                  {playingVoiceNoteId === note.id ? "Playing" : "Play"}
+                                  {playingVoiceNoteId === note.id
+                                    ? "Playing"
+                                    : "Play"}
                                 </button>
                                 <button
                                   type="button"
@@ -1250,7 +1289,7 @@ export default function Dashboard() {
                                       ? "Collapse transcript"
                                       : "Expand transcript"
                                   }
-                                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-(--line) bg-(--surface) text-(--muted) transition hover:text-foreground"
                                 >
                                   <ChevronDown
                                     size={15}
@@ -1263,21 +1302,86 @@ export default function Dashboard() {
                             </div>
 
                             {expanded ? (
-                              <div className="mt-4 border-t border-[var(--line)] pt-4">
-                                <div className="whitespace-pre-wrap text-sm leading-7 text-[var(--foreground-soft)]">
-                                  {note.content?.trim() ||
-                                    "No transcript available."}
+                              <div className="mt-4 border-t border-(--line) pt-4">
+                                {note.summary?.trim() ? (
+                                  <div className="rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3">
+                                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                      Summary
+                                    </div>
+                                    <p className="mt-2 text-sm leading-7 text-(--foreground-soft)">
+                                      {note.summary}
+                                    </p>
+                                  </div>
+                                ) : null}
+
+                                {note.analysis?.action_items.length ? (
+                                  <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3">
+                                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                      Action Items
+                                    </div>
+                                    <ul className="mt-2 space-y-2 text-sm leading-6 text-(--foreground-soft)">
+                                      {note.analysis.action_items.map((item) => (
+                                        <li key={item} className="flex gap-2">
+                                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-(--accent)" />
+                                          <span>{item}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+
+                                {note.analysis?.decisions.length ? (
+                                  <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3">
+                                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                      Decisions
+                                    </div>
+                                    <ul className="mt-2 space-y-2 text-sm leading-6 text-(--foreground-soft)">
+                                      {note.analysis.decisions.map((item) => (
+                                        <li key={item} className="flex gap-2">
+                                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-(--accent)" />
+                                          <span>{item}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+
+                                {note.analysis?.page_context ? (
+                                  <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3">
+                                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                      Page Context
+                                    </div>
+                                    <p className="mt-2 text-sm leading-7 text-(--foreground-soft)">
+                                      {note.analysis.page_context}
+                                    </p>
+                                  </div>
+                                ) : null}
+
+                                <div className="mt-4">
+                                  <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                    Transcript
+                                  </div>
+                                  <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-(--foreground-soft)">
+                                    {note.content?.trim() ||
+                                      "No transcript available."}
+                                  </div>
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    void handleDeleteMemory(note.id, "voice note")
+                                    void handleDeleteMemory(
+                                      note.id,
+                                      "voice note",
+                                    )
                                   }
                                   disabled={deletingMemoryId === note.id}
-                                  className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)] transition hover:border-[#cbd5e1] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="mt-4 inline-flex items-center gap-2 rounded-full border border-(--line) bg-(--surface) px-3 py-2 text-xs text-(--muted) transition hover:border-[#cbd5e1] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {deletingMemoryId === note.id ? (
-                                    <Loader2 size={13} className="animate-spin" />
+                                    <Loader2
+                                      size={13}
+                                      className="animate-spin"
+                                    />
                                   ) : (
                                     <Trash2 size={13} />
                                   )}
@@ -1289,7 +1393,7 @@ export default function Dashboard() {
                         );
                       })
                     ) : (
-                      <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--surface-soft)] px-5 py-8 text-sm text-[var(--muted)]">
+                      <div className="rounded-xl border border-dashed border-(--line) bg-(--surface-soft) px-5 py-8 text-sm text-(--muted)">
                         No voice notes attached to this page yet.
                       </div>
                     )}
