@@ -39,12 +39,49 @@ export type VoiceNoteRecord = BaseMemoryRecord & {
   matched_in_search?: boolean;
 };
 
+export type WorkflowSignal = {
+  threadId: string;
+  threadLabel: string;
+  resumeReason: string;
+  relatedMemoryIds: string[];
+  hasOpenLoop: boolean;
+  decisionCount: number;
+  actionItemCount: number;
+  voiceNoteCount: number;
+};
+
+export type ThreadSummary = {
+  id: string;
+  label: string;
+  title: string;
+  resumeReason: string;
+  latestMemoryId: string;
+  latestAt: string;
+  memoryIds: string[];
+  memoryCount: number;
+  voiceNoteCount: number;
+  decisionCount: number;
+  actionItemCount: number;
+  tags: string[];
+  folderName: string | null;
+  representativeSummary: string;
+};
+
 export type PageMemoryRecord = BaseMemoryRecord & {
   type: "page";
   parent_memory_id: null;
   is_placeholder: boolean;
   voiceNotes: VoiceNoteRecord[];
   matchedVoiceNoteIds?: string[];
+  thread_id?: string | null;
+  thread_title?: string | null;
+  thread_label?: string | null;
+  resume_reason?: string | null;
+  related_memory_ids?: string[];
+  has_open_loop?: boolean;
+  decision_count?: number;
+  action_item_count?: number;
+  voice_note_count?: number;
 };
 
 export type MemoryRecord = PageMemoryRecord | VoiceNoteRecord;

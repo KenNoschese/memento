@@ -25,12 +25,15 @@ import type {
   BriefingResponse,
   Folder,
   PageMemoryRecord,
+  ThreadSummary,
   VoiceNoteRecord,
+  WorkflowSignal,
 } from "@/app/lib/types";
 import { normalizeExtractedText } from "@/app/lib/memories";
 
 type MemoriesResponse = {
   memories: PageMemoryRecord[];
+  threads?: ThreadSummary[];
 };
 
 const SIDEBAR_MIN_WIDTH = 360;
@@ -44,6 +47,22 @@ function formatTimestamp(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function getMemoryTitle(memory: PageMemoryRecord) {
+  return memory.title?.trim() || "Untitled";
+}
+
+function getMemorySummary(memory: PageMemoryRecord) {
+  return memory.summary?.trim() || memory.content?.trim() || memory.url;
+}
+
+function getSourceLabel(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "source";
+  }
 }
 
 function ThemeToggle() {
@@ -170,6 +189,7 @@ function SidebarFilterButton({
 
 function MemoryListItem({
   memory,
+  signal,
   selected,
   highlighted,
   deleting,
@@ -180,6 +200,7 @@ function MemoryListItem({
   isDragging,
 }: {
   memory: PageMemoryRecord;
+  signal?: WorkflowSignal;
   selected: boolean;
   highlighted: boolean;
   deleting: boolean;
@@ -206,18 +227,25 @@ function MemoryListItem({
       className={`group rounded-xl border px-4 py-4 text-left transition ${
         selected
           ? "border-(--accent-edge) bg-(--surface) shadow-sm"
-          : "border-transparent bg-transparent hover:border-(--line) hover:bg-(--surface)"
+          : "border-(--line) bg-(--surface) hover:border-(--accent-edge) hover:bg-(--surface)"
       } ${highlighted ? "opacity-100" : "opacity-45"} ${
         isDragging ? "opacity-25" : ""
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
+          {signal?.hasOpenLoop ? (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-(--surface-soft) px-2.5 py-1 text-[10px] font-medium text-(--muted-strong)">
+                Resume
+              </span>
+            </div>
+          ) : null}
           <div className="truncate font-medium text-foreground">
-            {memory.title?.trim() || "Untitled"}
+            {getMemoryTitle(memory)}
           </div>
           <div className="mt-1 line-clamp-2 text-sm leading-6 text-(--muted)">
-            {memory.summary?.trim() || memory.content?.trim() || memory.url}
+            {signal?.resumeReason || getMemorySummary(memory)}
           </div>
         </div>
         <button
@@ -243,10 +271,18 @@ function MemoryListItem({
 
       <div className="mt-4 flex items-center justify-between gap-3 text-xs text-(--muted)">
         <span>{formatTimestamp(memory.created_at)}</span>
-        <span className="rounded-full bg-(--surface-soft) px-2.5 py-1 text-(--muted-strong)">
-          {memory.voiceNotes.length} voice note
-          {memory.voiceNotes.length === 1 ? "" : "s"}
-        </span>
+        <div className="flex items-center gap-2">
+          {signal?.decisionCount ? (
+            <span className="rounded-full bg-(--surface-soft) px-2.5 py-1 text-(--muted-strong)">
+              {signal.decisionCount} decision
+              {signal.decisionCount === 1 ? "" : "s"}
+            </span>
+          ) : null}
+          <span className="rounded-full bg-(--surface-soft) px-2.5 py-1 text-(--muted-strong)">
+            {memory.voiceNotes.length} voice note
+            {memory.voiceNotes.length === 1 ? "" : "s"}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -320,6 +356,7 @@ function LandingView({
   briefing,
   isLoadingBriefing,
   memories,
+  threads,
   chatMessages,
   isSendingChat,
   onSendChat,
@@ -328,6 +365,7 @@ function LandingView({
   briefing: BriefingResponse;
   isLoadingBriefing: boolean;
   memories: PageMemoryRecord[];
+  threads: ThreadSummary[];
   chatMessages: {
     role: "user" | "assistant";
     content: string;
@@ -338,18 +376,16 @@ function LandingView({
   onSelectMemory: (id: string) => void;
 }) {
   const [inputValue, setInputValue] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [chatMessages]);
 
   const suggestions = [
-    "What was the last thing I was researching?",
-    "Show me my recent voice notes about UI.",
-    "What are my top 3 most visited pages recently?",
+    "What was I trying to decide last?",
+    "What should I revisit next?",
+    "Show me pages with voice notes about product direction.",
   ];
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -361,70 +397,118 @@ function LandingView({
   };
 
   return (
-    <div className="relative mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden px-4 py-6 sm:px-8">
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto pb-32 pr-6 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--line) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted)"
-        style={{ scrollbarColor: "var(--line) transparent" }}
-      >
-        <section className="group mb-8 overflow-hidden rounded-2xl border border-(--line) bg-(--surface) px-6 py-5 shadow-sm transition-all duration-300 sm:px-8">
-          <div className="flex flex-col items-start">
-            <div className="flex w-full items-center justify-between">
-              <SectionLabel icon={<Sparkles size={14} />}>
-                Daily Briefing
-              </SectionLabel>
-              <ChevronDown
-                size={14}
-                className="text-(--muted) transition-transform duration-300 group-hover:rotate-180"
-              />
-            </div>
-            <div className="grid grid-rows-[0fr] transition-all duration-300 group-hover:mt-4 group-hover:grid-rows-[1fr]">
-              <div className="overflow-hidden">
-                {isLoadingBriefing ? (
-                  <div className="flex items-center gap-3 py-2 text-(--muted)">
-                    <Loader2 size={18} className="animate-spin" />
-                    <span className="text-base">
-                      Synthesizing your recent activity...
-                    </span>
+    <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-6 sm:px-8">
+      <div className="pb-6">
+        <section className="mb-8 overflow-hidden rounded-[2rem] border border-(--line) bg-[linear-gradient(135deg,var(--surface)_0%,var(--surface)_58%,var(--accent-soft)_100%)] px-6 py-6 shadow-sm sm:px-8">
+          <div className="flex items-center">
+            <SectionLabel icon={<Sparkles size={14} />}>
+              Resume Desk
+            </SectionLabel>
+          </div>
+
+          <div className="mt-4">
+            <div className="grid gap-6">
+              <div className="max-w-3xl">
+                <h2 className="font-serif text-3xl leading-tight text-foreground sm:text-[2.6rem]">
+                  Pick up the thread, not just the tab.
+                </h2>
+                <p className="mt-3 max-w-3xl text-base leading-7 text-(--foreground-soft)">
+                  {isLoadingBriefing
+                    ? "Synthesizing your recent activity..."
+                    : briefing.summary ||
+                      "Start browsing or recording voice notes and Memento will turn them into resumable work threads."}
+                </p>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+                <div className="rounded-[1.6rem] border border-(--line) bg-(--surface) p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <SectionLabel icon={<Brain size={14} />}>
+                        Continue Thread
+                      </SectionLabel>
+                      {threads[0] ? (
+                        <>
+                          <h3 className="mt-4 text-xl font-semibold text-foreground">
+                            {threads[0].title}
+                          </h3>
+                          <p className="mt-2 text-sm leading-6 text-(--foreground-soft)">
+                            {threads[0].resumeReason}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="mt-4 text-sm leading-6 text-(--muted)">
+                          No active thread yet. Capture a few pages and a voice note to make the resume layer useful.
+                        </p>
+                      )}
+                    </div>
+                    {threads[0] ? (
+                      <button
+                        type="button"
+                        onClick={() => onSelectMemory(threads[0].latestMemoryId)}
+                        className="inline-flex shrink-0 items-center gap-2 rounded-full bg-foreground px-4 py-2.5 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
+                      >
+                        Open thread
+                        <ExternalLink size={14} />
+                      </button>
+                    ) : null}
                   </div>
-                ) : (
-                  <div className="pb-2">
-                    <p className="text-lg leading-7 text-(--foreground-soft) sm:text-[1.1rem]">
-                      {briefing.summary ||
-                        "You haven&apos;t captured any memories yet today."}
-                    </p>
-                    {briefing.recentUrls.length > 0 && (
-                      <div className="mt-5 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            briefing.recentUrls.forEach((url) =>
-                              window.open(url, "_blank", "noopener,noreferrer"),
-                            )
-                          }
-                          className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
-                        >
-                          <ExternalLink size={15} />
-                          Resume work
-                        </button>
-                        <div className="rounded-full border border-(--line) bg-(--surface-soft) px-4 py-3 text-sm text-(--muted)">
-                          {memories.length} memories captured
-                        </div>
-                      </div>
-                    )}
+                  {threads[0] ? (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-(--accent-soft) px-3 py-1.5 text-xs font-medium text-(--accent)">
+                        {threads[0].label}
+                      </span>
+                      <span className="rounded-full border border-(--line) bg-(--surface-soft) px-3 py-1.5 text-xs text-(--muted-strong)">
+                        {threads[0].memoryCount} memories
+                      </span>
+                      <span className="rounded-full border border-(--line) bg-(--surface-soft) px-3 py-1.5 text-xs text-(--muted-strong)">
+                        {threads[0].voiceNoteCount} voice notes
+                      </span>
+                      {threads[0].decisionCount > 0 ? (
+                        <span className="rounded-full border border-(--line) bg-(--surface-soft) px-3 py-1.5 text-xs text-(--muted-strong)">
+                          {threads[0].decisionCount} decisions
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-[1.6rem] border border-(--line) bg-(--surface) p-5 shadow-sm">
+                  <SectionLabel icon={<Brain size={14} />}>
+                    Snapshot
+                  </SectionLabel>
+                  <div className="mt-4 space-y-3 text-sm text-(--foreground-soft)">
+                    <p>{memories.length} pages captured.</p>
+                    <p>{threads.length} active threads detected.</p>
+                    {briefing.recentUrls[0] ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          window.open(
+                            briefing.recentUrls[0],
+                            "_blank",
+                            "noopener,noreferrer",
+                          )
+                        }
+                        className="inline-flex items-center gap-2 rounded-full border border-(--line) bg-(--surface-soft) px-3 py-2 text-xs text-(--muted-strong) transition hover:border-(--accent-edge) hover:text-foreground"
+                      >
+                        Resume latest page
+                        <ExternalLink size={13} />
+                      </button>
+                    ) : null}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
         </section>
 
         {chatMessages.length === 0 ? (
-          <div className="mt-12 flex flex-col items-center justify-center text-center">
+          <div className="mt-10 flex flex-col items-center justify-center text-center">
             <h2 className="text-2xl font-semibold text-foreground">
               What&apos;s on your mind?
             </h2>
-            <p className="mt-2 text-(--muted)">
+            <p className="mt-2 max-w-2xl text-(--muted)">
               Ask anything about your browsing history or voice notes.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -432,7 +516,7 @@ function LandingView({
                 <button
                   key={suggestion}
                   onClick={() => onSendChat(suggestion)}
-                  className="rounded-2xl border border-(--line) bg-(--surface) px-5 py-3 text-sm text-(--muted-strong) transition hover:border-(--accent-edge) hover:bg-(--accent-soft) hover:text-(--accent)"
+                  className="rounded-full border border-(--line) bg-(--surface) px-4 py-2.5 text-sm text-(--muted-strong) transition hover:border-(--accent-edge) hover:bg-(--accent-soft) hover:text-(--accent)"
                 >
                   {suggestion}
                 </button>
@@ -440,7 +524,7 @@ function LandingView({
             </div>
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-6">
             {chatMessages.map((msg, i) => (
               <div
                 key={i}
@@ -448,44 +532,86 @@ function LandingView({
                   msg.role === "user" ? "items-end" : "items-start"
                 }`}
               >
-                <div
-                  className={`max-w-[85%] rounded-2xl px-5 py-4 ${
-                    msg.role === "user"
-                      ? "bg-(--accent) text-white dark:bg-(--accent-edge) dark:text-white"
-                      : "bg-(--surface) text-foreground border border-(--line)"
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap leading-7">{msg.content}</p>
-                </div>
-                {msg.sources && msg.sources.length > 0 && (
-                  <div className="mt-4 grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {msg.sources.map((source) => (
-                      <button
-                        key={source.id}
-                        onClick={() => onSelectMemory(source.id)}
-                        className="group flex flex-col items-start rounded-xl border border-(--line) bg-(--surface) p-4 text-left transition hover:border-(--accent-edge) hover:shadow-sm"
-                      >
-                        <div className="flex w-full items-center justify-between gap-2">
-                          <div className="truncate text-sm font-medium text-foreground">
-                            {source.title || "Untitled"}
-                          </div>
-                          <ExternalLink
-                            size={12}
-                            className="text-(--muted) group-hover:text-(--accent)"
-                          />
+                {msg.role === "user" ? (
+                  <div className="max-w-[85%] rounded-[1.6rem] bg-(--accent-strong) px-5 py-4 text-white shadow-[0_10px_24px_rgba(118,81,54,0.18)]">
+                    <p className="whitespace-pre-wrap leading-7">{msg.content}</p>
+                  </div>
+                ) : (
+                  <div className="w-full max-w-[85%] rounded-[1.7rem] border border-(--line) bg-(--surface) p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <SectionLabel icon={<Brain size={13} />}>
+                        Memento
+                      </SectionLabel>
+                      {msg.sources?.length ? (
+                        <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] font-medium text-(--muted)">
+                          <span className="rounded-full bg-(--surface-soft) px-2.5 py-1">
+                            {msg.sources.length} source
+                            {msg.sources.length === 1 ? "" : "s"}
+                          </span>
+                          <span className="rounded-full bg-(--surface-soft) px-2.5 py-1">
+                            {msg.sources.reduce(
+                              (count, source) => count + source.voiceNotes.length,
+                              0,
+                            )}{" "}
+                            note
+                            {msg.sources.reduce(
+                              (count, source) => count + source.voiceNotes.length,
+                              0,
+                            ) === 1
+                              ? ""
+                              : "s"}
+                          </span>
                         </div>
-                        <div className="mt-1 line-clamp-2 text-xs text-(--muted)">
-                          {source.summary || source.url}
+                      ) : null}
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="whitespace-pre-wrap leading-7 text-foreground">
+                        {msg.content}
+                      </p>
+                    </div>
+
+                    {msg.sources && msg.sources.length > 0 ? (
+                      <div className="mt-5 border-t border-(--line) pt-4">
+                        <div className="mb-3 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                          Sources
                         </div>
-                        {source.voiceNotes.length > 0 && (
-                          <div className="mt-3 flex items-center gap-1.5 rounded-full bg-(--accent-soft) px-2 py-1 text-[10px] font-medium text-(--accent)">
-                            <Play size={10} fill="currentColor" />
-                            {source.voiceNotes.length} note
-                            {source.voiceNotes.length === 1 ? "" : "s"}
-                          </div>
-                        )}
-                      </button>
-                    ))}
+                        <div className="space-y-2.5">
+                          {msg.sources.slice(0, 3).map((source) => (
+                            <button
+                              key={source.id}
+                              onClick={() => onSelectMemory(source.id)}
+                              className="group flex w-full items-start justify-between gap-3 rounded-[1.1rem] border border-(--line) bg-(--surface-soft) px-4 py-3 text-left transition hover:border-(--accent-edge) hover:bg-(--surface)"
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-foreground">
+                                  {source.title || "Untitled"}
+                                </div>
+                                <div className="mt-1 line-clamp-2 text-xs leading-5 text-(--muted)">
+                                  {source.summary || source.url}
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-(--muted-strong)">
+                                  <span>{getSourceLabel(source.url)}</span>
+                                  {source.voiceNotes.length > 0 ? (
+                                    <>
+                                      <span className="h-1 w-1 rounded-full bg-(--line)" />
+                                      <span>
+                                        {source.voiceNotes.length} note
+                                        {source.voiceNotes.length === 1 ? "" : "s"}
+                                      </span>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <ExternalLink
+                                size={14}
+                                className="mt-0.5 shrink-0 text-(--muted) transition group-hover:text-(--accent)"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -498,9 +624,10 @@ function LandingView({
             )}
           </div>
         )}
+        <div ref={chatEndRef} />
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 border-t border-(--line) bg-gradient-to-t from-(--background) via-(--background) to-transparent px-4 pb-8 pt-6 sm:px-8">
+      <div className="sticky bottom-0 mt-2 border-t border-(--line) bg-gradient-to-t from-(--background) via-(--background) to-transparent px-4 pb-8 pt-6 sm:px-8">
         <form
           onSubmit={handleSubmit}
           className="mx-auto flex max-w-3xl items-center gap-3"
@@ -538,6 +665,7 @@ export default function Dashboard() {
   const [userId, setUserId] = useState<string | null>(null);
   const [isUserIdReady, setIsUserIdReady] = useState(false);
   const [memories, setMemories] = useState<PageMemoryRecord[]>([]);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [briefing, setBriefing] = useState<BriefingResponse>({
     summary: "",
     recentUrls: [],
@@ -586,8 +714,17 @@ export default function Dashboard() {
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
+  const sortedMemories = useMemo(
+    () =>
+      [...memories].sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      ),
+    [memories],
+  );
+
   const filteredMemories = useMemo(() => {
-    return memories.filter((memory) => {
+    return sortedMemories.filter((memory) => {
       if (selectedFolderId) {
         return memory.folder_id === selectedFolderId;
       }
@@ -596,22 +733,51 @@ export default function Dashboard() {
       }
       return true;
     });
-  }, [memories, selectedFolderId, selectedTag]);
+  }, [selectedFolderId, selectedTag, sortedMemories]);
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
 
-    memories.forEach((memory) => {
+    sortedMemories.forEach((memory) => {
       memory.tags?.forEach((tag) => tags.add(tag));
     });
 
     return Array.from(tags).sort();
-  }, [memories]);
+  }, [sortedMemories]);
 
   const selectedMemory = useMemo(
     () => memories.find((memory) => memory.id === selectedMemoryId) ?? null,
     [memories, selectedMemoryId],
   );
+
+  const selectedSignal = useMemo<WorkflowSignal | null>(
+    () =>
+      selectedMemory
+        ? {
+            threadId: selectedMemory.thread_id ?? selectedMemory.id,
+            threadLabel: selectedMemory.thread_label ?? "Recent capture",
+            resumeReason:
+              selectedMemory.resume_reason ?? getMemorySummary(selectedMemory),
+            relatedMemoryIds: selectedMemory.related_memory_ids ?? [],
+            hasOpenLoop: Boolean(selectedMemory.has_open_loop),
+            decisionCount: selectedMemory.decision_count ?? 0,
+            actionItemCount: selectedMemory.action_item_count ?? 0,
+            voiceNoteCount:
+              selectedMemory.voice_note_count ?? selectedMemory.voiceNotes.length,
+          }
+        : null,
+    [selectedMemory],
+  );
+
+  const relatedMemories = useMemo(() => {
+    if (!selectedSignal) {
+      return [];
+    }
+
+    return selectedSignal.relatedMemoryIds
+      .map((memoryId) => memories.find((memory) => memory.id === memoryId))
+      .filter((memory): memory is PageMemoryRecord => Boolean(memory));
+  }, [memories, selectedSignal]);
 
   const resolvedSidebarWidth = isSidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
@@ -712,6 +878,7 @@ export default function Dashboard() {
   const fetchMemories = useCallback(async () => {
     if (!userId) {
       setMemories([]);
+      setThreads([]);
       setSelectedMemoryId(null);
       return;
     }
@@ -732,10 +899,12 @@ export default function Dashboard() {
 
       const records = data.memories ?? [];
       setMemories(records);
+      setThreads(data.threads ?? []);
       setSelectedMemoryId((currentId) => currentId);
     } catch (error) {
       console.error("Failed to fetch memories:", error);
       setMemories([]);
+      setThreads([]);
       setSelectedMemoryId(null);
     }
   }, [userId]);
@@ -1240,7 +1409,7 @@ export default function Dashboard() {
                       <SectionLabel icon={<Brain size={13} />}>
                         {highlightedIds.length > 0
                           ? "Matches"
-                          : "Memory Stream"}
+                          : "Work Streams"}
                       </SectionLabel>
                       <span className="text-xs text-(--muted)">
                         {highlightedIds.length > 0
@@ -1262,6 +1431,28 @@ export default function Dashboard() {
                           <MemoryListItem
                             key={memory.id}
                             memory={memory}
+                            signal={
+                              memory.thread_id
+                                ? {
+                                    threadId: memory.thread_id,
+                                    threadLabel:
+                                      memory.thread_label ?? "Recent capture",
+                                    resumeReason:
+                                      memory.resume_reason ??
+                                      getMemorySummary(memory),
+                                    relatedMemoryIds:
+                                      memory.related_memory_ids ?? [],
+                                    hasOpenLoop: Boolean(memory.has_open_loop),
+                                    decisionCount:
+                                      memory.decision_count ?? 0,
+                                    actionItemCount:
+                                      memory.action_item_count ?? 0,
+                                    voiceNoteCount:
+                                      memory.voice_note_count ??
+                                      memory.voiceNotes.length,
+                                  }
+                                : undefined
+                            }
                             selected={selected}
                             highlighted={highlighted}
                             deleting={deletingMemoryId === memory.id}
@@ -1278,6 +1469,11 @@ export default function Dashboard() {
                           />
                         );
                       })}
+                      {filteredMemories.length === 0 ? (
+                        <div className="rounded-[1.4rem] border border-dashed border-(--line) bg-(--surface) px-4 py-8 text-sm text-(--muted)">
+                          No memories match the current filters yet.
+                        </div>
+                      ) : null}
                     </div>
                   </section>
                 </div>
@@ -1319,7 +1515,10 @@ export default function Dashboard() {
           ) : null}
         </aside>
 
-        <main className="min-w-0 flex-1 lg:h-screen lg:overflow-y-auto">
+        <main
+          className="min-w-0 flex-1 lg:h-screen lg:overflow-y-auto [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--muted) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted-strong)"
+          style={{ scrollbarColor: "var(--muted) transparent" }}
+        >
           <div className="absolute right-6 top-6 z-50">
             <ThemeToggle />
           </div>
@@ -1348,8 +1547,13 @@ export default function Dashboard() {
                         <span className="truncate">{selectedMemory.url}</span>
                       </a>
                     </div>
-                    {(selectedMemory.tags?.length ?? 0) > 0 ? (
+                    {(selectedMemory.tags?.length ?? 0) > 0 || selectedSignal ? (
                       <div className="mt-5 flex flex-wrap gap-2">
+                        {selectedSignal ? (
+                          <span className="rounded-full bg-(--accent-soft) px-3 py-1.5 text-xs font-medium text-(--accent)">
+                            {selectedSignal.threadLabel}
+                          </span>
+                        ) : null}
                         {selectedMemory.tags?.map((tag) => (
                           <span
                             key={tag}
@@ -1397,11 +1601,36 @@ export default function Dashboard() {
                   <SectionLabel icon={<Sparkles size={14} />}>
                     Page Summary
                   </SectionLabel>
+                  {selectedSignal ? (
+                    <p className="mt-3 text-sm leading-6 text-(--muted)">
+                      {selectedSignal.resumeReason}
+                    </p>
+                  ) : null}
                   <article className="mt-5 max-w-3xl whitespace-pre-wrap text-[1.02rem] leading-8 text-(--foreground-soft)">
                     {selectedMemory.summary?.trim() ||
                       selectedMemory.content?.trim() ||
                       selectedMemory.url}
                   </article>
+
+                  {relatedMemories.length > 0 ? (
+                    <div className="mt-8 border-t border-(--line) pt-5">
+                      <SectionLabel icon={<ExternalLink size={14} />}>
+                        Related Memories
+                      </SectionLabel>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {relatedMemories.map((memory) => (
+                          <button
+                            key={memory.id}
+                            type="button"
+                            onClick={() => setSelectedMemoryId(memory.id)}
+                            className="inline-flex max-w-full items-center gap-2 rounded-full border border-(--line) bg-(--surface-soft) px-3 py-2 text-left text-xs text-(--muted-strong) transition hover:border-(--accent-edge) hover:text-foreground"
+                          >
+                            <span className="truncate">{getMemoryTitle(memory)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {selectedMemory.content?.trim() ? (
                     <div className="mt-8 border-t border-(--line) pt-5">
@@ -1616,6 +1845,7 @@ export default function Dashboard() {
               briefing={briefing}
               isLoadingBriefing={isLoadingBriefing}
               memories={memories}
+              threads={threads}
               chatMessages={chatMessages}
               isSendingChat={isSendingChat}
               onSendChat={handleChatSubmit}
