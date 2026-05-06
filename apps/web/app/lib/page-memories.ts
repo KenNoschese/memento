@@ -48,6 +48,7 @@ export async function ensurePageMemoryAttachment(
   input: {
     url: string;
     title?: string | null;
+    userId?: string | null;
   },
 ): Promise<PageMemoryRow> {
   const canonicalUrl = canonicalizeUrl(input.url);
@@ -76,6 +77,7 @@ export async function ensurePageMemoryAttachment(
         type: "page",
         dedupe_key: dedupeKey,
         is_placeholder: true,
+        user_id: input.userId,
       },
     ])
     .select("id, url, canonical_url, title, dedupe_key, is_placeholder");

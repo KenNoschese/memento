@@ -1,7 +1,37 @@
 import { useEffect, useState } from "react"
+import { Storage } from "@plasmohq/storage"
+
+const storage = new Storage()
+
+const getOrCreateUserId = async () => {
+  let userId = await storage.get<string>("memento_user_id")
+
+  if (!userId) {
+    userId = `user-${crypto.randomUUID().slice(0, 8)}`
+    await storage.set("memento_user_id", userId)
+  }
+
+  return userId
+}
 
 function IndexPopup() {
   const [isIndexingEnabled, setIsIndexingEnabled] = useState<boolean>(true)
+  const [userId, setUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const initializeUserId = async () => {
+      let storedUserId = await storage.get<string>("memento_user_id")
+
+      if (!storedUserId) {
+        storedUserId = `user-${crypto.randomUUID().slice(0, 8)}`
+        await storage.set("memento_user_id", storedUserId)
+      }
+
+      setUserId(storedUserId)
+    }
+
+    void initializeUserId()
+  }, [])
 
   useEffect(() => {
     chrome.storage.local.get(["isIndexingEnabled"], (result) => {
@@ -140,8 +170,12 @@ function IndexPopup() {
       </button>
 
       <button
-        onClick={() => {
-          chrome.tabs.create({ url: "http://localhost:3000" })
+        onClick={async () => {
+          const currentUserId = userId ?? (await getOrCreateUserId())
+          window.open(
+            `http://localhost:3000/?user=${encodeURIComponent(currentUserId)}`,
+            "_blank"
+          )
         }}
         style={{
           backgroundColor: "#000000",

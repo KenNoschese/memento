@@ -58,14 +58,23 @@ export async function OPTIONS() {
   });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const { data: pageData, error: pageError } = await supabase
+    const url = new URL(req.url);
+    const userId = url.searchParams.get("memento_user_id")?.trim();
+
+    let pageQuery = supabase
       .from("memories")
       .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
       .eq("type", "page")
       .order("created_at", { ascending: false })
       .limit(100);
+
+    if (userId) {
+      pageQuery = pageQuery.eq("user_id", userId);
+    }
+
+    const { data: pageData, error: pageError } = await pageQuery;
 
     if (pageError) {
       throw pageError;
@@ -73,14 +82,25 @@ export async function GET() {
 
     const pageIds = (pageData ?? []).map((memory) => memory.id);
 
-    const { data: voiceData, error: voiceError } = pageIds.length
-      ? await supabase
-          .from("memories")
-          .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
-          .eq("type", "voice_note")
-          .in("parent_memory_id", pageIds)
-          .order("created_at", { ascending: false })
+    const voiceResult = pageIds.length
+      ? userId
+        ? await supabase
+            .from("memories")
+            .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
+            .eq("type", "voice_note")
+            .in("parent_memory_id", pageIds)
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false })
+        : await supabase
+            .from("memories")
+            .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
+            .eq("type", "voice_note")
+            .in("parent_memory_id", pageIds)
+            .order("created_at", { ascending: false })
       : { data: [], error: null };
+
+    const voiceData = voiceResult.data ?? [];
+    const voiceError = voiceResult.error;
 
     if (voiceError) {
       throw voiceError;

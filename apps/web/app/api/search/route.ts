@@ -33,7 +33,7 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    const { query } = (await req.json()) as SearchRequest;
+    const { query, memento_user_id } = (await req.json()) as SearchRequest & { memento_user_id?: string };
 
     if (!query?.trim()) {
       return NextResponse.json(
@@ -42,6 +42,14 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!memento_user_id?.trim()) {
+      return NextResponse.json(
+        { error: "memento_user_id is required" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const resolvedUserId = memento_user_id.trim();
     console.log("Search API: Generating 3072-dim embedding for query:", query);
 
     // 1. Generate embedding for the search query
@@ -57,11 +65,12 @@ export async function POST(req: Request) {
     }
 
     // 2. Query Supabase using RPC
-    console.log("Search API: Querying Supabase match_memories...");
+    console.log("Search API: Querying Supabase match_memories for user:", resolvedUserId);
     const { data: matches, error: dbError } = await supabase.rpc("match_memories", {
       query_embedding: embedding,
       match_threshold: 0.3, // Lower threshold for better demo results
-      match_count: 5,
+      match_count: 10,
+      p_user_id: resolvedUserId,
     });
 
     if (dbError) {
@@ -112,6 +121,7 @@ export async function POST(req: Request) {
       .from("memories")
       .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
       .eq("type", "page")
+      .eq("user_id", resolvedUserId)
       .in("id", pageIds);
 
     if (pageError) {
@@ -122,6 +132,7 @@ export async function POST(req: Request) {
       .from("memories")
       .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
       .eq("type", "voice_note")
+      .eq("user_id", resolvedUserId)
       .in("parent_memory_id", pageIds)
       .order("created_at", { ascending: false });
 

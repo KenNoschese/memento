@@ -36,11 +36,20 @@ export async function POST(req: Request) {
     const audioFile = formData.get("audio") as File;
     const url = formData.get("url") as string;
     const title = formData.get("title") as string | null;
+    const memento_user_id = formData.get("memento_user_id") as string | null;
 
     if (!audioFile || !url) {
       console.error("API Voice: Missing audio or URL");
       return NextResponse.json(
         { error: "Missing data" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    if (!memento_user_id) {
+      console.error("API Voice: Missing memento_user_id");
+      return NextResponse.json(
+        { error: "memento_user_id is required" },
         { status: 400, headers: corsHeaders },
       );
     }
@@ -51,6 +60,14 @@ export async function POST(req: Request) {
         { message: "Audio too short or silent", transcript: "" },
         { status: 200, headers: corsHeaders },
       );
+    }
+
+    // Just-in-time user creation
+    try {
+      console.log("API Voice: Attempting to upsert user:", memento_user_id);
+      await supabase.from("users").upsert({ id: memento_user_id }).select();
+    } catch (userError: unknown) {
+      console.warn("API Voice: User upsert failed:", getErrorMessage(userError));
     }
 
     // Convert audio to Base64 for storage
@@ -88,7 +105,7 @@ export async function POST(req: Request) {
     }
 
     const canonicalUrl = canonicalizeUrl(url);
-    const pageMemory = await ensurePageMemoryAttachment(supabase, { url, title });
+    const pageMemory = await ensurePageMemoryAttachment(supabase, { url, title, userId: memento_user_id });
 
     const dedupeKey = buildMemoryDedupeKey({
       type: "voice_note",
@@ -154,6 +171,7 @@ export async function POST(req: Request) {
         dedupe_key: dedupeKey,
         tags,
         analysis,
+        user_id: memento_user_id,
       },
     ]);
 

@@ -18,12 +18,21 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const { data, error } = await supabase
+    const url = new URL(req.url);
+    const user = url.searchParams.get("memento_user_id")?.trim();
+
+    let query = supabase
       .from("folders")
       .select("*")
       .order("name", { ascending: true });
+
+    if (user) {
+      query = query.eq("user_id", user);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -38,7 +47,10 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const { name } = await req.json();
+    const url = new URL(req.url);
+    const user = url.searchParams.get("memento_user_id")?.trim();
+    const { name, memento_user_id } = await req.json();
+    const resolvedUserId = memento_user_id ?? user ?? null;
 
     if (!name?.trim()) {
       return NextResponse.json(
@@ -49,7 +61,7 @@ export async function POST(req: Request) {
 
     const { data, error } = await supabase
       .from("folders")
-      .insert([{ name: name.trim() }])
+      .insert([{ name: name.trim(), user_id: resolvedUserId }])
       .select()
       .single();
 

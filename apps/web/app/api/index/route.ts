@@ -37,7 +37,17 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    const { url, title, content } = await req.json();
+    const { url, title, content, memento_user_id } = await req.json();
+
+    if (!memento_user_id?.trim()) {
+      return NextResponse.json(
+        { error: "memento_user_id is required" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const resolvedUserId = memento_user_id.trim();
+    console.log("API received data for user:", resolvedUserId);
     const normalizedContent = normalizeExtractedText(content);
     const canonicalUrl = canonicalizeUrl(url);
     const dedupeKey = buildPageMemoryDedupeKey({
@@ -104,6 +114,18 @@ export async function POST(req: Request) {
       );
     }
 
+    // Just-in-time user creation: ensure the user exists before inserting memory
+    try {
+      console.log("API: Attempting to upsert user:", resolvedUserId);
+      await supabase.from("users").upsert({ id: resolvedUserId }).select();
+      console.log("API: User upserted successfully");
+    } catch (userError: unknown) {
+      console.warn(
+        "API: User upsert failed (will attempt memory save anyway):",
+        getErrorMessage(userError),
+      );
+    }
+
     const pageValues = {
       url,
       canonical_url: canonicalUrl,
@@ -115,6 +137,7 @@ export async function POST(req: Request) {
       type: "page" as const,
       dedupe_key: dedupeKey,
       is_placeholder: false,
+      user_id: resolvedUserId,
     };
 
     const dbError = existingPage

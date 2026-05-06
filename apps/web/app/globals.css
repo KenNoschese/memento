@@ -16,16 +16,12 @@
   --accent-edge: #d7bea6;
 }
 
-@theme inline {
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-manrope);
   --font-serif: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
-}
-
-html {
-  background: var(--background);
 }
 
 body {
@@ -46,6 +42,3 @@ textarea {
   font: inherit;
 }
 
-.font-serif {
-  font-family: var(--font-fraunces), serif;
-}

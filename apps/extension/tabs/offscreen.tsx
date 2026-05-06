@@ -12,7 +12,7 @@ export default function OffscreenPage() {
       if (message.target !== "offscreen") return
 
       if (message.type === "start-recording") {
-        startRecording(message.url, message.title)
+        startRecording(message.url, message.title, message.userId)
       } else if (message.type === "stop-recording") {
         stopRecording()
       }
@@ -29,11 +29,12 @@ export default function OffscreenPage() {
     }
   }, [])
 
-  const uploadAudio = async (blob: Blob, url: string, title?: string) => {
+  const uploadAudio = async (blob: Blob, url: string, userId: string, title?: string) => {
     const audioFile = new File([blob], "voice.webm", { type: "audio/webm" })
     const formData = new FormData()
     formData.append("audio", audioFile)
     formData.append("url", url)
+    formData.append("memento_user_id", userId)
     if (title) {
       formData.append("title", title)
     }
@@ -61,7 +62,7 @@ export default function OffscreenPage() {
     }
   }
 
-  const startRecording = async (url: string, title?: string) => {
+  const startRecording = async (url: string, title?: string, userId?: string) => {
     if (isCurrentlyRecording.current) {
       return
     }
@@ -96,7 +97,12 @@ export default function OffscreenPage() {
             return
           }
 
-          await uploadAudio(audioBlob, url, title)
+          if (!userId) {
+            console.error("Offscreen: Missing userId for upload")
+            return
+          }
+
+          await uploadAudio(audioBlob, url, userId, title)
           chrome.runtime.sendMessage({ type: "recording-finished", target: "background" })
         } catch (error) {
           // Handled in uploadAudio
