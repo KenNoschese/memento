@@ -1,6 +1,7 @@
 "use client";
 
 import * as Select from "@radix-ui/react-select";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
@@ -36,6 +37,7 @@ const SIDEBAR_MIN_WIDTH = 300;
 const SIDEBAR_MAX_WIDTH = 460;
 const SIDEBAR_DEFAULT_WIDTH = 384;
 const SIDEBAR_COLLAPSED_WIDTH = 84;
+const USER_STORAGE_KEY = "memento_user_id";
 
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString([], {
@@ -436,6 +438,10 @@ function LandingView({
 }
 
 export default function Dashboard() {
+  const searchParams = useSearchParams();
+  const urlUserId = (searchParams.get("user") || "").trim();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isUserIdReady, setIsUserIdReady] = useState(false);
   const [memories, setMemories] = useState<PageMemoryRecord[]>([]);
   const [briefing, setBriefing] = useState<BriefingResponse>({
     summary: "",
@@ -499,7 +505,17 @@ export default function Dashboard() {
 
   const fetchBriefing = useCallback(async () => {
     try {
-      const response = await fetch("/api/briefing");
+      if (!userId) {
+        setBriefing({
+          summary: "Briefing is unavailable right now.",
+          recentUrls: [],
+        });
+        return;
+      }
+
+      const response = await fetch(
+        `/api/briefing?memento_user_id=${encodeURIComponent(userId)}`,
+      );
       const text = await response.text();
 
       if (!text) {
@@ -524,11 +540,19 @@ export default function Dashboard() {
     } finally {
       setIsLoadingBriefing(false);
     }
-  }, []);
+  }, [userId]);
 
   const fetchMemories = useCallback(async () => {
+    if (!userId) {
+      setMemories([]);
+      setSelectedMemoryId(null);
+      return;
+    }
+
     try {
-      const response = await fetch("/api/memories");
+      const response = await fetch(
+        `/api/memories?memento_user_id=${encodeURIComponent(userId)}`,
+      );
       const data = (await response.json()) as
         | MemoriesResponse
         | { error: string };
@@ -547,7 +571,7 @@ export default function Dashboard() {
       setMemories([]);
       setSelectedMemoryId(null);
     }
-  }, []);
+  }, [userId]);
 
   const handleSearch = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -670,14 +694,19 @@ export default function Dashboard() {
   }, []);
 
   const fetchFolders = useCallback(async () => {
+    if (!userId) {
+      setFolders([]);
+      return;
+    }
+
     try {
-      const response = await fetch("/api/folders");
+      const response = await fetch(`/api/folders?memento_user_id=${encodeURIComponent(userId)}`);
       const data = (await response.json()) as { folders: Folder[] };
       setFolders(data.folders || []);
     } catch (error) {
       console.error("Failed to fetch folders:", error);
     }
-  }, []);
+  }, [userId]);
 
   const handleCreateFolder = async (event: FormEvent) => {
     event.preventDefault();
@@ -687,7 +716,7 @@ export default function Dashboard() {
       const response = await fetch("/api/folders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newFolderName.trim() }),
+        body: JSON.stringify({ name: newFolderName.trim(), memento_user_id: userId }),
       });
 
       if (response.ok) {
@@ -773,6 +802,40 @@ export default function Dashboard() {
   );
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedUserId = window.localStorage.getItem(USER_STORAGE_KEY)?.trim();
+    let resolvedUserId = storedUserId || "";
+
+    if (urlUserId) {
+      resolvedUserId = urlUserId;
+      window.localStorage.setItem(USER_STORAGE_KEY, resolvedUserId);
+    } else if (!resolvedUserId) {
+      resolvedUserId = `user-${crypto.randomUUID().slice(0, 8)}`;
+      window.localStorage.setItem(USER_STORAGE_KEY, resolvedUserId);
+    }
+
+    console.log("Dashboard synced to ID:", resolvedUserId);
+    setUserId(resolvedUserId);
+    setIsUserIdReady(true);
+  }, [urlUserId]);
+
+  useEffect(() => {
+    if (!isUserIdReady) {
+      return;
+    }
+
+    if (!userId) {
+      setIsLoadingBriefing(false);
+      setMemories([]);
+      setSelectedMemoryId(null);
+      return;
+    }
+
+    setIsLoadingBriefing(true);
+
     const timeoutId = window.setTimeout(() => {
       void fetchBriefing();
       void fetchMemories();
@@ -780,7 +843,7 @@ export default function Dashboard() {
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [fetchBriefing, fetchFolders, fetchMemories]);
+  }, [fetchBriefing, fetchFolders, fetchMemories, isUserIdReady, userId]);
 
   useEffect(() => {
     if (!isResizingSidebar) {
@@ -821,6 +884,19 @@ export default function Dashboard() {
       window.speechSynthesis.cancel();
     };
   }, []);
+
+  if (!isUserIdReady) {
+    return (
+      <div className="min-h-screen bg-background px-6 py-16 text-foreground">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-(--line) bg-(--surface) p-6 text-center shadow-sm">
+          <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
+          <p className="mt-3 text-sm text-(--muted)">
+            Preparing your workspace...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground lg:h-screen lg:overflow-hidden">

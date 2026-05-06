@@ -1,6 +1,9 @@
 import { Readability } from "@mozilla/readability"
+import { Storage } from "@plasmohq/storage"
 
 import { getApiBaseUrl } from "../config"
+
+const storage = new Storage()
 
 // Prevent duplicate indexing runs for the same page
 let isIndexed = false
@@ -150,6 +153,7 @@ const extractAndSend = async () => {
 
       // 2. Send to API (Communication to Next.js backend)
       const apiBaseUrl = await getApiBaseUrl()
+      const userId = await storage.get<string>("memento_user_id")
       const response = await fetch(`${apiBaseUrl}/api/index`, {
         method: "POST",
         headers: {
@@ -158,7 +162,8 @@ const extractAndSend = async () => {
         body: JSON.stringify({
           url: window.location.href,
           title: article.title,
-          content: article.textContent
+          content: article.textContent,
+          memento_user_id: userId
         })
       })
 

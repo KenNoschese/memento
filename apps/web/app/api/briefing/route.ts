@@ -13,8 +13,8 @@ const supabase = createClient(
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const BRIEFING_MODEL = "llama-3.1-8b-instant";
 
-// Simple in-memory cache
-let cachedBriefing: { data: BriefingResponse; timestamp: number } | null = null;
+// Simple in-memory cache, scoped per user id
+let cachedBriefing: Map<string, { data: BriefingResponse; timestamp: number }> = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const corsHeaders = {
@@ -31,12 +31,24 @@ export async function OPTIONS() {
   });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const url = new URL(req.url);
+    const memento_user_id = url.searchParams.get("memento_user_id")?.trim();
+
+    if (!memento_user_id) {
+      return NextResponse.json(
+        { error: "memento_user_id is required" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const cachedEntry = cachedBriefing.get(memento_user_id);
+
     // Check cache
-    if (cachedBriefing && Date.now() - cachedBriefing.timestamp < CACHE_TTL) {
-      console.log("Briefing API: Returning cached briefing");
-      return NextResponse.json(cachedBriefing.data, { headers: corsHeaders });
+    if (cachedEntry && Date.now() - cachedEntry.timestamp < CACHE_TTL) {
+      console.log("Briefing API: Returning cached briefing for user:", memento_user_id);
+      return NextResponse.json(cachedEntry.data, { headers: corsHeaders });
     }
 
     if (!process.env.GROQ_API_KEY) {
@@ -44,11 +56,12 @@ export async function GET() {
       return NextResponse.json({ error: "Server configuration error" }, { status: 500, headers: corsHeaders });
     }
 
-    console.log("Briefing API: Fetching recent memories...");
+    console.log("Briefing API: Fetching recent memories for user:", memento_user_id);
     const { data: memories, error: dbError } = await supabase
       .from("memories")
       .select("id, title, content, summary, url, created_at")
       .eq("type", "page")
+      .eq("user_id", memento_user_id)
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -69,6 +82,7 @@ export async function GET() {
       .from("memories")
       .select("id, parent_memory_id, content, summary, analysis, created_at")
       .eq("type", "voice_note")
+      .eq("user_id", memento_user_id)
       .not("analysis", "is", null)
       .order("created_at", { ascending: false })
       .limit(8);
@@ -137,7 +151,7 @@ export async function GET() {
     };
 
     // Update cache
-    cachedBriefing = { data: response, timestamp: Date.now() };
+    cachedBriefing.set(memento_user_id, { data: response, timestamp: Date.now() });
 
     return NextResponse.json(response, { headers: corsHeaders });
 
