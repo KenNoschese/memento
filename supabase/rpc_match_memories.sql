@@ -1,8 +1,8 @@
 create extension if not exists vector;
 
-drop function if exists match_memories(vector(768), double precision, integer);
-drop function if exists match_memories(vector(768), float, int);
-drop function if exists match_memories(vector(1536), float, int);
+-- Drop all possible previous signatures to avoid "function not found" due to mismatches
+drop function if exists match_memories(vector, float, int, text);
+drop function if exists match_memories(vector(3072), float, int, text);
 drop function if exists match_memories(vector(3072), float, int);
 
 create or replace function match_memories (
@@ -42,6 +42,7 @@ begin
     1 - (memories.embedding <=> query_embedding) as similarity
   from memories
   where memories.embedding is not null
+    -- CRITICAL: Filter by user_id if provided
     and (p_user_id is null or memories.user_id = p_user_id)
     and 1 - (memories.embedding <=> query_embedding) > match_threshold
   order by memories.embedding <=> query_embedding
@@ -50,3 +51,4 @@ end;
 $$;
 
 grant execute on function match_memories(vector(3072), float, int, text) to anon;
+grant execute on function match_memories(vector(3072), float, int, text) to authenticated;
