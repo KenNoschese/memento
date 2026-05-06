@@ -2,12 +2,13 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getErrorMessage } from "@/app/lib/errors";
 import type {
+  Folder,
   PageMemoryRecord,
   ThreadSummary,
   VoiceNoteRecord,
 } from "@/app/lib/types";
 import { normalizeVoiceNoteAnalysis } from "@/app/lib/voice-note-analysis";
-import { buildThreadMetadata } from "@/app/lib/workflow";
+import { buildThreadMetadata, getAutoFolderKey } from "@/app/lib/workflow";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,6 +51,100 @@ function normalizeEmbedding(
     return parsed.filter((value): value is number => typeof value === "number");
   } catch {
     return null;
+  }
+}
+
+async function applyAutoFolders({
+  userId,
+  memories,
+  foldersById,
+}: {
+  userId: string;
+  memories: PageMemoryRecord[];
+  foldersById: Map<string, Folder>;
+}) {
+  const threaded = buildThreadMetadata(memories, foldersById);
+  const foldersByAutoKey = new Map<string, Folder>();
+  for (const folder of foldersById.values()) {
+    if (folder.source === "auto" && folder.auto_key) {
+      foldersByAutoKey.set(folder.auto_key, folder);
+    }
+  }
+
+  for (const thread of threaded.threads) {
+    const bucket = memories.filter((memory) => thread.memoryIds.includes(memory.id));
+    const unassignedIds = bucket
+      .filter((memory) => !memory.folder_id)
+      .map((memory) => memory.id);
+
+    if (unassignedIds.length === 0) {
+      continue;
+    }
+
+    const assignedFolderIds = Array.from(
+      new Set(
+        bucket
+          .map((memory) => memory.folder_id)
+          .filter((folderId): folderId is string => Boolean(folderId)),
+      ),
+    );
+
+    let targetFolder: Folder | null = null;
+
+    if (assignedFolderIds.length === 1) {
+      targetFolder = foldersById.get(assignedFolderIds[0]) ?? null;
+    } else if (
+      assignedFolderIds.length === 0 &&
+      thread.eligibleForAutoFolder &&
+      thread.suggestedFolderName
+    ) {
+      const autoKey = getAutoFolderKey(thread.id);
+      targetFolder = foldersByAutoKey.get(autoKey) ?? null;
+
+      if (!targetFolder) {
+        const { data, error } = await supabase
+          .from("folders")
+          .insert([
+            {
+              name: thread.suggestedFolderName,
+              user_id: userId,
+              source: "auto",
+              auto_key: autoKey,
+            },
+          ])
+          .select("id, name, created_at, source, auto_key")
+          .single();
+
+        if (error) {
+          throw error;
+        }
+
+        targetFolder = data as Folder;
+        foldersByAutoKey.set(autoKey, targetFolder);
+        foldersById.set(targetFolder.id, targetFolder);
+      }
+    }
+
+    if (!targetFolder) {
+      continue;
+    }
+
+    const { error: updateError } = await supabase
+      .from("memories")
+      .update({ folder_id: targetFolder.id })
+      .in("id", unassignedIds)
+      .eq("user_id", userId)
+      .is("folder_id", null);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    for (const memory of memories) {
+      if (unassignedIds.includes(memory.id)) {
+        memory.folder_id = targetFolder.id;
+      }
+    }
   }
 }
 
@@ -137,11 +232,11 @@ export async function GET(req: Request) {
       voiceNotes: voiceNotesByPageId.get(memory.id) ?? [],
     }));
 
-    const folderNamesById = new Map<string, string>();
+    const foldersById = new Map<string, Folder>();
     if (userId) {
       const { data: folderData, error: folderError } = await supabase
         .from("folders")
-        .select("id, name")
+        .select("id, name, created_at, source, auto_key")
         .eq("user_id", userId);
 
       if (folderError) {
@@ -149,11 +244,13 @@ export async function GET(req: Request) {
       }
 
       for (const folder of folderData ?? []) {
-        folderNamesById.set(folder.id, folder.name);
+        foldersById.set(folder.id, folder as Folder);
       }
+
+      await applyAutoFolders({ userId, memories, foldersById });
     }
 
-    const threaded = buildThreadMetadata(memories, folderNamesById);
+    const threaded = buildThreadMetadata(memories, foldersById);
 
     return NextResponse.json(
       {
