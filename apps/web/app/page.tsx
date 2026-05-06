@@ -594,6 +594,7 @@ export default function Dashboard() {
       if (!query.trim() || !userId || isSendingChat) return;
 
       const userMessage = { role: "user" as const, content: query.trim() };
+      const currentHistory = [...chatMessages];
       setChatMessages((prev) => [...prev, userMessage]);
       setIsSendingChat(true);
 
@@ -603,6 +604,10 @@ export default function Dashboard() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             query: query.trim(),
+            history: currentHistory.map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
             memento_user_id: userId,
           }),
         });
@@ -633,7 +638,7 @@ export default function Dashboard() {
         setIsSendingChat(false);
       }
     },
-    [userId, isSendingChat],
+    [userId, isSendingChat, chatMessages],
   );
 
   const fetchMemories = useCallback(async () => {
