@@ -3,9 +3,9 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Groq } from "groq-sdk";
 import { getErrorMessage } from "@/app/lib/errors";
-import { generatePageSummary } from "@/app/lib/page-summaries";
 import { buildMemoryDedupeKey, canonicalizeUrl, isUniqueViolation } from "@/app/lib/memories";
 import { ensurePageMemoryAttachment } from "@/app/lib/page-memories";
+import { generateVoiceNoteAnalysis } from "@/app/lib/voice-note-analysis";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -122,16 +122,20 @@ export async function POST(req: Request) {
     const embedding = embeddingResult.embedding.values;
     console.log("API Voice: Embedding size:", embedding.length);
 
+    let summary: string | null = null;
     let tags: string[] = [];
+    let analysis = null;
     try {
-      const summaryResult = await generatePageSummary({
+      const analysisResult = await generateVoiceNoteAnalysis({
         url,
-        title: "Voice Note",
-        content: text,
+        title,
+        transcript: text,
       });
-      tags = summaryResult.tags;
+      summary = analysisResult.summary;
+      tags = analysisResult.tags;
+      analysis = analysisResult.analysis;
     } catch (tagError: unknown) {
-      console.warn("API Voice: Tag generation failed:", getErrorMessage(tagError));
+      console.warn("API Voice: Transcript analysis failed:", getErrorMessage(tagError));
     }
 
     console.log("API Voice: Inserting into Supabase...");
@@ -141,6 +145,7 @@ export async function POST(req: Request) {
         canonical_url: canonicalUrl,
         title: "Voice Note",
         content: text,
+        summary,
         audio: audioB64,
         embedding,
         type: "voice_note",
@@ -148,6 +153,7 @@ export async function POST(req: Request) {
         is_placeholder: false,
         dedupe_key: dedupeKey,
         tags,
+        analysis,
       },
     ]);
 

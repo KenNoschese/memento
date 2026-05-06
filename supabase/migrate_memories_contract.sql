@@ -17,6 +17,7 @@ alter table memories add column if not exists canonical_url text;
 alter table memories add column if not exists parent_memory_id uuid;
 alter table memories add column if not exists is_placeholder boolean;
 alter table memories add column if not exists summary text;
+alter table memories add column if not exists analysis jsonb;
 
 update memories set type = 'page' where type is null;
 alter table memories alter column type set not null;

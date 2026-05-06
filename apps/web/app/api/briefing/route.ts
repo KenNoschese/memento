@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
 import { getErrorMessage } from "@/app/lib/errors";
 import type { BriefingResponse } from "@/app/lib/types";
+import { normalizeVoiceNoteAnalysis } from "@/app/lib/voice-note-analysis";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,7 +45,6 @@ export async function GET() {
     }
 
     console.log("Briefing API: Fetching recent memories...");
-    // 1. Fetch last 10 page memories
     const { data: memories, error: dbError } = await supabase
       .from("memories")
       .select("id, title, content, summary, url, created_at")
@@ -65,8 +65,20 @@ export async function GET() {
       return NextResponse.json(emptyResponse, { headers: corsHeaders });
     }
 
+    const { data: voiceNotes, error: voiceError } = await supabase
+      .from("memories")
+      .select("id, parent_memory_id, content, summary, analysis, created_at")
+      .eq("type", "voice_note")
+      .not("analysis", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(8);
+
+    if (voiceError) {
+      console.error("Briefing API: Voice note fetch error:", voiceError.message);
+      throw voiceError;
+    }
+
     console.log(`Briefing API: Calling Groq ${BRIEFING_MODEL}...`);
-    // 2. Prepare context for Groq
     const context = (memories ?? [])
       .map((memory, index) => {
         const title = memory.title?.trim() || "Untitled";
@@ -78,16 +90,36 @@ export async function GET() {
       })
       .join("\n\n");
 
-    // 3. Call Groq
+    const voiceContext = (voiceNotes ?? [])
+      .map((note, index) => {
+        const analysis = normalizeVoiceNoteAnalysis(note.analysis);
+        if (!analysis) {
+          return null;
+        }
+
+        const summary = note.summary?.trim() || note.content?.trim() || "No transcript captured.";
+        const actionItems = analysis.action_items.length
+          ? analysis.action_items.join("; ")
+          : "none";
+        const decisions = analysis.decisions.length
+          ? analysis.decisions.join("; ")
+          : "none";
+        const pageContext = analysis.page_context?.trim() || "No page link noted.";
+
+        return `[V${index + 1}] Summary: ${summary}\nAction items: ${actionItems}\nDecisions: ${decisions}\nPage context: ${pageContext}`;
+      })
+      .filter((entry): entry is string => Boolean(entry))
+      .join("\n\n");
+
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant providing a 'Daily Briefing' for a user based on their recent web history. Summarize their current intent or workflow in 2-3 concise sentences. Focus on what they are trying to achieve. Do not mention the numbers [1], [2], etc., just provide the narrative summary.",
+          content: "You are a helpful assistant providing a 'Daily Briefing' for a user based on their recent web history and voice notes. Summarize their current intent or workflow in 2-3 concise sentences. Mention pending actions or decisions only when they are clearly supported by the context. Do not mention source labels like [1] or [V1].",
         },
         {
           role: "user",
-          content: `Here is my recent history:\n\n${context}`,
+          content: `Here is my recent page history:\n\n${context}\n\nHere are voice-note insights:\n\n${voiceContext || "No voice-note insights available."}`,
         },
       ],
       model: BRIEFING_MODEL,

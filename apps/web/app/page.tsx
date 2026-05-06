@@ -202,8 +202,13 @@ function VoiceQuoteCard({
         </button>
       </div>
       <p className="mt-4 text-base leading-7 text-foreground">
-        “{note.content}”
+        “{note.summary?.trim() || note.content || "No transcript available."}”
       </p>
+      {note.analysis?.action_items.length ? (
+        <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3 text-sm text-(--foreground-soft)">
+          Next: {note.analysis.action_items[0]}
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={() => onSelectMemory(pageId)}
@@ -350,7 +355,7 @@ function LandingView({
                         window.open(url, "_blank", "noopener,noreferrer"),
                       )
                     }
-                    className="inline-flex items-center gap-2 rounded-full bg-foreground) px-5 py-3 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
+                    className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
                   >
                     <ExternalLink size={15} />
                     Resume work
@@ -1298,9 +1303,68 @@ export default function Dashboard() {
 
                             {expanded ? (
                               <div className="mt-4 border-t border-(--line) pt-4">
-                                <div className="whitespace-pre-wrap text-sm leading-7 text-(--foreground-soft)">
-                                  {note.content?.trim() ||
-                                    "No transcript available."}
+                                {note.summary?.trim() ? (
+                                  <div className="rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3">
+                                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                      Summary
+                                    </div>
+                                    <p className="mt-2 text-sm leading-7 text-(--foreground-soft)">
+                                      {note.summary}
+                                    </p>
+                                  </div>
+                                ) : null}
+
+                                {note.analysis?.action_items.length ? (
+                                  <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3">
+                                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                      Action Items
+                                    </div>
+                                    <ul className="mt-2 space-y-2 text-sm leading-6 text-(--foreground-soft)">
+                                      {note.analysis.action_items.map((item) => (
+                                        <li key={item} className="flex gap-2">
+                                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-(--accent)" />
+                                          <span>{item}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+
+                                {note.analysis?.decisions.length ? (
+                                  <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3">
+                                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                      Decisions
+                                    </div>
+                                    <ul className="mt-2 space-y-2 text-sm leading-6 text-(--foreground-soft)">
+                                      {note.analysis.decisions.map((item) => (
+                                        <li key={item} className="flex gap-2">
+                                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-(--accent)" />
+                                          <span>{item}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+
+                                {note.analysis?.page_context ? (
+                                  <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3">
+                                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                      Page Context
+                                    </div>
+                                    <p className="mt-2 text-sm leading-7 text-(--foreground-soft)">
+                                      {note.analysis.page_context}
+                                    </p>
+                                  </div>
+                                ) : null}
+
+                                <div className="mt-4">
+                                  <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+                                    Transcript
+                                  </div>
+                                  <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-(--foreground-soft)">
+                                    {note.content?.trim() ||
+                                      "No transcript available."}
+                                  </div>
                                 </div>
                                 <button
                                   type="button"

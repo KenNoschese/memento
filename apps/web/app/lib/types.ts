@@ -1,5 +1,13 @@
 export type MemoryType = "page" | "voice_note";
 
+export type VoiceNoteAnalysis = {
+  action_items: string[];
+  decisions: string[];
+  page_context: string | null;
+  model: string;
+  generated_at: string;
+};
+
 export type BaseMemoryRecord = {
   id: string;
   url: string;
@@ -16,6 +24,7 @@ export type BaseMemoryRecord = {
   audio?: string | null;
   parent_memory_id?: string | null;
   is_placeholder?: boolean;
+  analysis?: VoiceNoteAnalysis | null;
 };
 
 export type Folder = {

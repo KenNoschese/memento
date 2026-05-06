@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getErrorMessage } from "@/app/lib/errors";
+import { normalizeVoiceNoteAnalysis } from "@/app/lib/voice-note-analysis";
 import type {
   PageMemoryRecord,
   SearchRequest,
@@ -78,10 +79,13 @@ export async function POST(req: Request) {
       title: string | null;
       content: string | null;
       summary?: string | null;
+      tags?: string[] | null;
+      folder_id?: string | null;
       audio: string | null;
       embedding: number[] | string | null;
       type: "page" | "voice_note";
       is_placeholder: boolean;
+      analysis?: unknown;
       similarity: number;
     };
 
@@ -106,7 +110,7 @@ export async function POST(req: Request) {
 
     const { data: pages, error: pageError } = await supabase
       .from("memories")
-      .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
       .eq("type", "page")
       .in("id", pageIds);
 
@@ -116,7 +120,7 @@ export async function POST(req: Request) {
 
     const { data: voiceNotes, error: voiceError } = await supabase
       .from("memories")
-      .select("id, url, canonical_url, title, content, summary, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
       .eq("type", "voice_note")
       .in("parent_memory_id", pageIds)
       .order("created_at", { ascending: false });
@@ -135,6 +139,7 @@ export async function POST(req: Request) {
         ...note,
         type: "voice_note",
         parent_memory_id: note.parent_memory_id,
+        analysis: normalizeVoiceNoteAnalysis(note.analysis),
         matched_in_search: (matchedVoiceNoteIdsByPage.get(note.parent_memory_id) ?? []).includes(note.id),
       };
 
@@ -152,6 +157,7 @@ export async function POST(req: Request) {
         type: "page" as const,
         parent_memory_id: null,
         is_placeholder: Boolean(page.is_placeholder),
+        analysis: normalizeVoiceNoteAnalysis(page.analysis),
         voiceNotes: voiceNotesByPageId.get(page.id) ?? [],
         matchedVoiceNoteIds: matchedVoiceNoteIdsByPage.get(page.id) ?? [],
       }))

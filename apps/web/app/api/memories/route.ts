@@ -5,6 +5,7 @@ import type {
   PageMemoryRecord,
   VoiceNoteRecord,
 } from "@/app/lib/types";
+import { normalizeVoiceNoteAnalysis } from "@/app/lib/voice-note-analysis";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -61,7 +62,7 @@ export async function GET() {
   try {
     const { data: pageData, error: pageError } = await supabase
       .from("memories")
-      .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+      .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
       .eq("type", "page")
       .order("created_at", { ascending: false })
       .limit(100);
@@ -75,7 +76,7 @@ export async function GET() {
     const { data: voiceData, error: voiceError } = pageIds.length
       ? await supabase
           .from("memories")
-          .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder")
+          .select("id, url, canonical_url, title, content, summary, tags, folder_id, created_at, embedding, type, audio, parent_memory_id, is_placeholder, analysis")
           .eq("type", "voice_note")
           .in("parent_memory_id", pageIds)
           .order("created_at", { ascending: false })
@@ -94,6 +95,7 @@ export async function GET() {
       const note: VoiceNoteRecord = {
         ...memory,
         embedding: normalizeEmbedding(memory.embedding),
+        analysis: normalizeVoiceNoteAnalysis(memory.analysis),
         type: "voice_note",
         parent_memory_id: memory.parent_memory_id,
       };
@@ -106,6 +108,7 @@ export async function GET() {
     const memories: PageMemoryRecord[] = (pageData ?? []).map((memory) => ({
       ...memory,
       embedding: normalizeEmbedding(memory.embedding),
+      analysis: normalizeVoiceNoteAnalysis(memory.analysis),
       type: "page",
       parent_memory_id: null,
       is_placeholder: Boolean(memory.is_placeholder),
