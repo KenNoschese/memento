@@ -15,7 +15,6 @@ import {
   Loader2,
   Play,
   Plus,
-  Search,
   Sparkles,
   Tag,
   Trash2,
@@ -24,7 +23,6 @@ import type {
   BriefingResponse,
   Folder,
   PageMemoryRecord,
-  SearchResponse,
   VoiceNoteRecord,
 } from "@/app/lib/types";
 import { normalizeExtractedText } from "@/app/lib/memories";
@@ -169,60 +167,6 @@ function MemoryListItem({
   );
 }
 
-function VoiceQuoteCard({
-  note,
-  pageTitle,
-  pageId,
-  onSelectMemory,
-  onPlay,
-  isPlaying,
-}: {
-  note: VoiceNoteRecord;
-  pageTitle: string;
-  pageId: string;
-  onSelectMemory: (id: string) => void;
-  onPlay: (note: VoiceNoteRecord) => void;
-  isPlaying: boolean;
-}) {
-  return (
-    <article className="rounded-xl border border-(--line) bg-(--surface) p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs uppercase tracking-[0.18em] text-(--muted)">
-          {formatTimestamp(note.created_at)}
-        </span>
-        <button
-          type="button"
-          onClick={() => onPlay(note)}
-          disabled={isPlaying}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-(--accent-edge) bg-(--accent-soft) text-(--accent) transition hover:bg-(--accent) hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
-        >
-          {isPlaying ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Play size={14} fill="currentColor" />
-          )}
-        </button>
-      </div>
-      <p className="mt-4 text-base leading-7 text-foreground">
-        “{note.summary?.trim() || note.content || "No transcript available."}”
-      </p>
-      {note.analysis?.action_items.length ? (
-        <div className="mt-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-3 text-sm text-(--foreground-soft)">
-          Next: {note.analysis.action_items[0]}
-        </div>
-      ) : null}
-      <button
-        type="button"
-        onClick={() => onSelectMemory(pageId)}
-        className="mt-5 inline-flex w-full min-w-0 items-center gap-2 text-sm text-(--accent) transition hover:text-(--accent-strong)"
-      >
-        <span className="truncate">On {pageTitle}</span>
-        <ExternalLink size={14} className="shrink-0" />
-      </button>
-    </article>
-  );
-}
-
 function FolderPicker({
   folders,
   value,
@@ -291,147 +235,203 @@ function LandingView({
   briefing,
   isLoadingBriefing,
   memories,
+  chatMessages,
+  isSendingChat,
+  onSendChat,
   onSelectMemory,
-  onPlayVoiceNote,
-  playingVoiceNoteId,
 }: {
   briefing: BriefingResponse;
   isLoadingBriefing: boolean;
   memories: PageMemoryRecord[];
+  chatMessages: {
+    role: "user" | "assistant";
+    content: string;
+    sources?: PageMemoryRecord[];
+  }[];
+  isSendingChat: boolean;
+  onSendChat: (query: string) => void;
   onSelectMemory: (id: string) => void;
-  onPlayVoiceNote: (note: VoiceNoteRecord) => void;
-  playingVoiceNoteId: string | null;
 }) {
-  const recentVoiceNotes = useMemo(() => {
-    const allNotes: (VoiceNoteRecord & {
-      pageTitle: string;
-      pageId: string;
-    })[] = [];
+  const [inputValue, setInputValue] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-    memories.forEach((memory) => {
-      memory.voiceNotes.forEach((note) => {
-        allNotes.push({
-          ...note,
-          pageTitle: memory.title || "Untitled",
-          pageId: memory.id,
-        });
-      });
-    });
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
-    return allNotes
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      )
-      .slice(0, 3);
-  }, [memories]);
+  const suggestions = [
+    "What was the last thing I was researching?",
+    "Show me my recent voice notes about UI.",
+    "What are my top 3 most visited pages recently?",
+  ];
 
-  const recentPages = useMemo(() => memories.slice(0, 4), [memories]);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputValue.trim()) {
+      onSendChat(inputValue);
+      setInputValue("");
+    }
+  };
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-5 px-5 py-5 sm:px-8 lg:px-10 lg:py-6">
-      <section className="rounded-2xl border border-(--line) bg-(--surface) px-6 py-6 shadow-sm sm:px-8 sm:py-7">
-        <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-          <SectionLabel icon={<Sparkles size={14} />}>
-            Daily Briefing
-          </SectionLabel>
-          {isLoadingBriefing ? (
-            <div className="mt-4 flex items-center gap-3 text-(--muted)">
-              <Loader2 size={18} className="animate-spin" />
-              <span className="text-base">
-                Synthesizing your recent activity...
-              </span>
-            </div>
-          ) : (
-            <>
-              <p className="mt-4 max-w-176 text-balance text-lg leading-7 text-(--foreground-soft) sm:text-[1.1rem]">
-                {briefing.summary ||
-                  "You haven&apos;t captured any memories yet today."}
-              </p>
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                {briefing.recentUrls.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      briefing.recentUrls.forEach((url) =>
-                        window.open(url, "_blank", "noopener,noreferrer"),
-                      )
-                    }
-                    className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
-                  >
-                    <ExternalLink size={15} />
-                    Resume work
-                  </button>
-                ) : null}
-                <div className="rounded-full border border-(--line) bg-(--surface-soft) px-4 py-3 text-sm text-(--muted)">
-                  {memories.length} page memories captured
-                </div>
+    <div className="relative mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden px-4 py-6 sm:px-8">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto pb-32 pr-6 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--line) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted)"
+        style={{ scrollbarColor: "var(--line) transparent" }}
+      >
+        <section className="mb-8 rounded-2xl border border-(--line) bg-(--surface) px-6 py-6 shadow-sm sm:px-8 sm:py-7">
+          <div className="flex flex-col items-start">
+            <SectionLabel icon={<Sparkles size={14} />}>
+              Daily Briefing
+            </SectionLabel>
+            {isLoadingBriefing ? (
+              <div className="mt-4 flex items-center gap-3 text-(--muted)">
+                <Loader2 size={18} className="animate-spin" />
+                <span className="text-base">
+                  Synthesizing your recent activity...
+                </span>
               </div>
-            </>
-          )}
-        </div>
-      </section>
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <section className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <SectionLabel icon={<Brain size={14} />}>Recent Pages</SectionLabel>
-            <span className="text-sm text-(--muted)">
-              {recentPages.length} shown
-            </span>
-          </div>
-          <div className="mt-4 space-y-3">
-            {recentPages.length > 0 ? (
-              recentPages.map((memory) => (
-                <button
-                  type="button"
-                  key={memory.id}
-                  onClick={() => onSelectMemory(memory.id)}
-                  className="flex w-full items-start justify-between gap-4 rounded-xl border border-(--line) bg-(--surface-soft) px-4 py-4 text-left transition hover:bg-(--surface)"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-base font-medium text-foreground)">
-                      {memory.title || "Untitled"}
-                    </div>
-                    <div className="mt-1 truncate text-sm text-(--muted)">
-                      {memory.url}
+            ) : (
+              <div className="mt-4">
+                <p className="max-w-3xl text-balance text-lg leading-7 text-(--foreground-soft) sm:text-[1.1rem]">
+                  {briefing.summary ||
+                    "You haven&apos;t captured any memories yet today."}
+                </p>
+                {briefing.recentUrls.length > 0 && (
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        briefing.recentUrls.forEach((url) =>
+                          window.open(url, "_blank", "noopener,noreferrer"),
+                        )
+                      }
+                      className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
+                    >
+                      <ExternalLink size={15} />
+                      Resume work
+                    </button>
+                    <div className="rounded-full border border-(--line) bg-(--surface-soft) px-4 py-3 text-sm text-(--muted)">
+                      {memories.length} memories captured
                     </div>
                   </div>
-                  <span className="text-xs text-(--muted)">
-                    {formatTimestamp(memory.created_at)}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <div className="rounded-xl border border-dashed border-(--line) px-5 py-8 text-sm text-(--muted)">
-                No recent pages captured.
+                )}
               </div>
             )}
           </div>
         </section>
 
-        <section className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
-          <SectionLabel icon={<Play size={14} />}>Voice Context</SectionLabel>
-          <div className="mt-4 space-y-3">
-            {recentVoiceNotes.length > 0 ? (
-              recentVoiceNotes.map((note) => (
-                <VoiceQuoteCard
-                  key={note.id}
-                  note={note}
-                  pageId={note.pageId}
-                  pageTitle={note.pageTitle}
-                  onSelectMemory={onSelectMemory}
-                  onPlay={onPlayVoiceNote}
-                  isPlaying={playingVoiceNoteId === note.id}
-                />
-              ))
-            ) : (
-              <div className="rounded-xl border border-dashed border-(--line) bg-(--surface-soft) px-5 py-8 text-sm text-(--muted)">
-                No recent voice notes.
+        {chatMessages.length === 0 ? (
+          <div className="mt-12 flex flex-col items-center justify-center text-center">
+            <h2 className="text-2xl font-semibold text-foreground">
+              What&apos;s on your mind?
+            </h2>
+            <p className="mt-2 text-(--muted)">
+              Ask anything about your browsing history or voice notes.
+            </p>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              {suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => onSendChat(suggestion)}
+                  className="rounded-2xl border border-(--line) bg-(--surface) px-5 py-3 text-sm text-(--muted-strong) transition hover:border-(--accent-edge) hover:bg-(--accent-soft) hover:text-(--accent)"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {chatMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex flex-col ${
+                  msg.role === "user" ? "items-end" : "items-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-2xl px-5 py-4 ${
+                    msg.role === "user"
+                      ? "bg-(--accent) text-white"
+                      : "bg-(--surface) text-foreground border border-(--line)"
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap leading-7">{msg.content}</p>
+                </div>
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="mt-4 grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {msg.sources.map((source) => (
+                      <button
+                        key={source.id}
+                        onClick={() => onSelectMemory(source.id)}
+                        className="group flex flex-col items-start rounded-xl border border-(--line) bg-(--surface) p-4 text-left transition hover:border-(--accent-edge) hover:shadow-sm"
+                      >
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <div className="truncate text-sm font-medium text-foreground">
+                            {source.title || "Untitled"}
+                          </div>
+                          <ExternalLink
+                            size={12}
+                            className="text-(--muted) group-hover:text-(--accent)"
+                          />
+                        </div>
+                        <div className="mt-1 line-clamp-2 text-xs text-(--muted)">
+                          {source.summary || source.url}
+                        </div>
+                        {source.voiceNotes.length > 0 && (
+                          <div className="mt-3 flex items-center gap-1.5 rounded-full bg-(--accent-soft) px-2 py-1 text-[10px] font-medium text-(--accent)">
+                            <Play size={10} fill="currentColor" />
+                            {source.voiceNotes.length} note
+                            {source.voiceNotes.length === 1 ? "" : "s"}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            {isSendingChat && (
+              <div className="flex items-center gap-3 text-(--muted)">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-sm">Memento is thinking...</span>
               </div>
             )}
           </div>
-        </section>
+        )}
+      </div>
+
+      <div className="absolute bottom-0 left-0 right-0 border-t border-(--line) bg-gradient-to-t from-(--background) via-(--background) to-transparent px-4 pb-8 pt-6 sm:px-8">
+        <form
+          onSubmit={handleSubmit}
+          className="mx-auto flex max-w-3xl items-center gap-3"
+        >
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder="Ask Memento..."
+              className="w-full rounded-2xl border border-(--line) bg-(--surface) py-4 pl-6 pr-14 text-base shadow-sm outline-none transition focus:border-(--accent) focus:ring-1 focus:ring-(--accent-soft)"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              disabled={isSendingChat}
+            />
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isSendingChat}
+              className="absolute right-3 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-xl bg-(--accent) text-white transition hover:bg-(--accent-strong) disabled:opacity-50"
+            >
+              {isSendingChat ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <Sparkles size={18} />
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -447,8 +447,6 @@ export default function Dashboard() {
     summary: "",
     recentUrls: [],
   });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
   const [isLoadingBriefing, setIsLoadingBriefing] = useState(true);
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
@@ -466,6 +464,10 @@ export default function Dashboard() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [chatMessages, setChatMessages] = useState<
+    { role: "user" | "assistant"; content: string; sources?: PageMemoryRecord[] }[]
+  >([]);
+  const [isSendingChat, setIsSendingChat] = useState(false);
   const [playingVoiceNoteId, setPlayingVoiceNoteId] = useState<string | null>(
     null,
   );
@@ -542,6 +544,53 @@ export default function Dashboard() {
     }
   }, [userId]);
 
+  const handleChatSubmit = useCallback(
+    async (query: string) => {
+      if (!query.trim() || !userId || isSendingChat) return;
+
+      const userMessage = { role: "user" as const, content: query.trim() };
+      setChatMessages((prev) => [...prev, userMessage]);
+      setIsSendingChat(true);
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: query.trim(),
+            memento_user_id: userId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Chat request failed");
+        }
+
+        const data = await response.json();
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.answer,
+            sources: data.sources,
+          },
+        ]);
+      } catch (error) {
+        console.error("Chat error:", error);
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "I'm sorry, I encountered an error while processing your request.",
+          },
+        ]);
+      } finally {
+        setIsSendingChat(false);
+      }
+    },
+    [userId, isSendingChat],
+  );
+
   const fetchMemories = useCallback(async () => {
     if (!userId) {
       setMemories([]);
@@ -572,49 +621,6 @@ export default function Dashboard() {
       setSelectedMemoryId(null);
     }
   }, [userId]);
-
-  const handleSearch = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-
-      const normalizedQuery = searchQuery.trim();
-      if (!normalizedQuery) {
-        setHighlightedIds([]);
-        return;
-      }
-
-      setIsSearching(true);
-      try {
-        const response = await fetch("/api/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query: searchQuery.trim(),
-            memento_user_id: userId,
-          }),
-        });
-
-        const data = (await response.json()) as
-          | SearchResponse
-          | { error: string };
-
-        if (!response.ok || "error" in data) {
-          throw new Error("error" in data ? data.error : "Search failed");
-        }
-
-        const matchIds = data.matches.map((match) => match.id);
-        setHighlightedIds(matchIds);
-        if (matchIds[0]) {
-          setSelectedMemoryId(matchIds[0]);
-        }
-      } catch (error) {
-        console.error("Search failed:", error);
-      } finally {
-        setIsSearching(false);
-      }
-    },
-    [searchQuery, userId],
-  );
 
   const handleDeleteMemory = useCallback(
     async (memoryId: string, label: string) => {
@@ -985,32 +991,6 @@ export default function Dashboard() {
 
             {!isSidebarCollapsed ? (
               <>
-                <form onSubmit={handleSearch} className="relative mt-6">
-                  <Search
-                    className="pointer-events-none absolute left-4 top-3.5 text-(--muted)"
-                    size={18}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Search your browsing memory"
-                    className="w-full rounded-xl border border-(--line) bg-(--surface) py-3 pl-11 pr-11 text-sm outline-none transition placeholder:text-(--muted) focus:border-(--accent)"
-                    value={searchQuery}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setSearchQuery(value);
-                      if (!value.trim()) {
-                        setHighlightedIds([]);
-                      }
-                    }}
-                  />
-                  {isSearching ? (
-                    <Loader2
-                      className="absolute right-4 top-3.5 animate-spin text-(--muted)"
-                      size={18}
-                    />
-                  ) : null}
-                </form>
-
                 <div className="mt-6 flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
                   <section>
                     <div className="mb-3 flex items-center justify-between gap-2 px-1">
@@ -1499,9 +1479,10 @@ export default function Dashboard() {
               briefing={briefing}
               isLoadingBriefing={isLoadingBriefing}
               memories={memories}
+              chatMessages={chatMessages}
+              isSendingChat={isSendingChat}
+              onSendChat={handleChatSubmit}
               onSelectMemory={setSelectedMemoryId}
-              onPlayVoiceNote={handlePlayVoiceNote}
-              playingVoiceNoteId={playingVoiceNoteId}
             />
           )}
         </main>
