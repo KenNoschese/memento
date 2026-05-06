@@ -8,7 +8,8 @@ drop function if exists match_memories(vector(3072), float, int);
 create or replace function match_memories (
   query_embedding vector(3072),
   match_threshold float,
-  match_count int
+  match_count int,
+  p_user_id text default null
 )
 returns table (
   id uuid,
@@ -41,10 +42,11 @@ begin
     1 - (memories.embedding <=> query_embedding) as similarity
   from memories
   where memories.embedding is not null
+    and (p_user_id is null or memories.user_id = p_user_id)
     and 1 - (memories.embedding <=> query_embedding) > match_threshold
   order by memories.embedding <=> query_embedding
   limit match_count;
 end;
 $$;
 
-grant execute on function match_memories(vector(3072), float, int) to anon;
+grant execute on function match_memories(vector(3072), float, int, text) to anon;

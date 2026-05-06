@@ -140,7 +140,7 @@ export async function POST(req: Request) {
       user_id: resolvedUserId,
     };
 
-    let dbError = existingPage
+    const dbError = existingPage
       ? (
           await supabase
             .from("memories")

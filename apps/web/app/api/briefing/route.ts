@@ -14,7 +14,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const BRIEFING_MODEL = "llama-3.1-8b-instant";
 
 // Simple in-memory cache, scoped per user id
-let cachedBriefing: Map<string, { data: BriefingResponse; timestamp: number }> = new Map();
+const cachedBriefing: Map<string, { data: BriefingResponse; timestamp: number }> = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const corsHeaders = {

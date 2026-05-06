@@ -36,6 +36,10 @@ const isUrlBlocked = (rawUrl?: string) => {
   }
 }
 
+import { Storage } from "@plasmohq/storage"
+
+const storage = new Storage()
+
 // Unified Message Listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "background") return
@@ -103,11 +107,18 @@ async function startRecording() {
     let attempts = 0
     const sendMessage = async () => {
       try {
+        let userId = await storage.get<string>("memento_user_id")
+        if (!userId) {
+          userId = `user-${crypto.randomUUID().slice(0, 8)}`
+          await storage.set("memento_user_id", userId)
+        }
+
         await chrome.runtime.sendMessage({ 
           type: "start-recording", 
           target: "offscreen", 
           url: tab.url,
-          title: tab.title ?? ""
+          title: tab.title ?? "",
+          userId
         })
         return true
       } catch (e) {

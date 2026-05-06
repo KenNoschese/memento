@@ -588,8 +588,12 @@ export default function Dashboard() {
         const response = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: normalizedQuery }),
+          body: JSON.stringify({
+            query: searchQuery.trim(),
+            memento_user_id: userId,
+          }),
         });
+
         const data = (await response.json()) as
           | SearchResponse
           | { error: string };
@@ -609,7 +613,7 @@ export default function Dashboard() {
         setIsSearching(false);
       }
     },
-    [searchQuery],
+    [searchQuery, userId],
   );
 
   const handleDeleteMemory = useCallback(
@@ -700,7 +704,9 @@ export default function Dashboard() {
     }
 
     try {
-      const response = await fetch(`/api/folders?memento_user_id=${encodeURIComponent(userId)}`);
+      const response = await fetch(
+        `/api/folders?memento_user_id=${encodeURIComponent(userId)}`,
+      );
       const data = (await response.json()) as { folders: Folder[] };
       setFolders(data.folders || []);
     } catch (error) {
@@ -716,7 +722,10 @@ export default function Dashboard() {
       const response = await fetch("/api/folders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newFolderName.trim(), memento_user_id: userId }),
+        body: JSON.stringify({
+          name: newFolderName.trim(),
+          memento_user_id: userId,
+        }),
       });
 
       if (response.ok) {
@@ -818,8 +827,10 @@ export default function Dashboard() {
     }
 
     console.log("Dashboard synced to ID:", resolvedUserId);
-    setUserId(resolvedUserId);
-    setIsUserIdReady(true);
+    setTimeout(() => {
+      setUserId(resolvedUserId);
+      setIsUserIdReady(true);
+    }, 0);
   }, [urlUserId]);
 
   useEffect(() => {
@@ -828,13 +839,17 @@ export default function Dashboard() {
     }
 
     if (!userId) {
-      setIsLoadingBriefing(false);
-      setMemories([]);
-      setSelectedMemoryId(null);
+      setTimeout(() => {
+        setIsLoadingBriefing(false);
+        setMemories([]);
+        setSelectedMemoryId(null);
+      }, 0);
       return;
     }
 
-    setIsLoadingBriefing(true);
+    setTimeout(() => {
+      setIsLoadingBriefing(true);
+    }, 0);
 
     const timeoutId = window.setTimeout(() => {
       void fetchBriefing();
@@ -1396,12 +1411,14 @@ export default function Dashboard() {
                                       Action Items
                                     </div>
                                     <ul className="mt-2 space-y-2 text-sm leading-6 text-(--foreground-soft)">
-                                      {note.analysis.action_items.map((item) => (
-                                        <li key={item} className="flex gap-2">
-                                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-(--accent)" />
-                                          <span>{item}</span>
-                                        </li>
-                                      ))}
+                                      {note.analysis.action_items.map(
+                                        (item) => (
+                                          <li key={item} className="flex gap-2">
+                                            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-(--accent)" />
+                                            <span>{item}</span>
+                                          </li>
+                                        ),
+                                      )}
                                     </ul>
                                   </div>
                                 ) : null}

@@ -78,6 +78,16 @@ const handleVisibilityOrUnload = () => {
 // Wire up SPA + emergency listeners
 const setupAdditionalIndexing = () => {
   try {
+    // Sync userId if we are on the dashboard domain
+    if (window.location.hostname === "localhost" && window.location.port === "3000") {
+      const dashboardUserId = window.localStorage.getItem("memento_user_id")
+      if (dashboardUserId) {
+        storage.set("memento_user_id", dashboardUserId).then(() => {
+          console.debug("Memento: Synced userId from dashboard:", dashboardUserId)
+        })
+      }
+    }
+
     // Attempt to read a custom debounce value from storage
     try {
       chrome.storage.local.get(["spaDebounceMs"], (res: any) => {
@@ -153,7 +163,15 @@ const extractAndSend = async () => {
 
       // 2. Send to API (Communication to Next.js backend)
       const apiBaseUrl = await getApiBaseUrl()
-      const userId = await storage.get<string>("memento_user_id")
+      let userId = await storage.get<string>("memento_user_id")
+
+      // Fallback: If we don't have a userId yet, generate a stable one for this extension
+      if (!userId) {
+        userId = `user-${crypto.randomUUID().slice(0, 8)}`
+        await storage.set("memento_user_id", userId)
+        console.log("Memento: Generated new stable userId:", userId)
+      }
+
       const response = await fetch(`${apiBaseUrl}/api/index`, {
         method: "POST",
         headers: {
