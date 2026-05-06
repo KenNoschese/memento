@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Groq } from "groq-sdk";
 import { getErrorMessage } from "@/app/lib/errors";
 import { normalizeVoiceNoteAnalysis } from "@/app/lib/voice-note-analysis";
 import type { PageMemoryRecord, VoiceNoteRecord } from "@/app/lib/types";
@@ -13,9 +12,8 @@ const supabase = createClient(
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const CHAT_MODEL = "llama-3.1-8b-instant";
+const primaryChatModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const fallbackChatModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,6 +27,69 @@ export async function OPTIONS() {
     status: 204,
     headers: corsHeaders,
   });
+}
+
+function isGeminiRateLimitError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes("429") ||
+    message.includes("quota") ||
+    message.includes("rate limit") ||
+    message.includes("resource exhausted") ||
+    message.includes("resource_exhausted")
+  );
+}
+
+async function generateChatText(
+  prompt: string,
+  {
+    systemInstruction,
+    temperature = 0,
+  }: {
+    systemInstruction?: string;
+    temperature?: number;
+  } = {},
+) {
+  const attempts = [
+    { label: "gemini-2.5-flash", model: primaryChatModel },
+    { label: "gemini-2.5-flash-lite", model: fallbackChatModel },
+  ];
+
+  let lastError: unknown;
+
+  for (let index = 0; index < attempts.length; index += 1) {
+    const attempt = attempts[index];
+
+    try {
+      const result = await attempt.model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature },
+        ...(systemInstruction
+          ? {
+              systemInstruction: {
+                role: "system",
+                parts: [{ text: systemInstruction }],
+              },
+            }
+          : {}),
+      });
+
+      const text = result.response.text().trim();
+      if (!text) {
+        throw new Error(`Gemini ${attempt.label} returned an empty response`);
+      }
+
+      return { text, model: attempt.label };
+    } catch (error: unknown) {
+      lastError = error;
+
+      if (index === attempts.length - 1 || !isGeminiRateLimitError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Gemini chat generation failed");
 }
 
 export async function POST(req: Request) {
@@ -57,13 +118,22 @@ Follow-up Question: ${query}
 
 Standalone search query:`;
 
-      const condenseResponse = await groq.chat.completions.create({
-        messages: [{ role: "user", content: condensePrompt }],
-        model: CHAT_MODEL,
-        temperature: 0,
-      });
-      standaloneQuery = condenseResponse.choices[0]?.message?.content || query;
-      console.log("Chat API: Condensed query:", standaloneQuery);
+      try {
+        const condenseResponse = await generateChatText(condensePrompt, {
+          temperature: 0,
+        });
+        standaloneQuery = condenseResponse.text;
+        console.log(
+          "Chat API: Condensed query with model:",
+          condenseResponse.model,
+          standaloneQuery,
+        );
+      } catch (condenseError: unknown) {
+        console.warn(
+          "Chat API: Failed to condense query, using raw query:",
+          getErrorMessage(condenseError),
+        );
+      }
     }
 
     // 1. Generate embedding for the (condensed) query
@@ -90,7 +160,7 @@ Standalone search query:`;
       throw dbError;
     }
 
-    // 3. Format context for Groq
+    // 3. Format context for Gemini
     
     // Group search hits by parent page for better organization
     const groupedMatchIds = new Set<string>();
@@ -193,7 +263,7 @@ ${notesContext ? "Attached Voice Notes for this page:\n" + notesContext : "No vo
 
     const currentDate = new Date().toLocaleDateString();
 
-    // 4. Call Groq for synthesized answer
+    // 4. Call Gemini for synthesized answer
     const prompt = `Answer the user's question using ONLY the information in the CONTEXT and USER WORKSPACE STRUCTURE below.
       
 CURRENT DATE: ${currentDate}
@@ -213,29 +283,42 @@ INSTRUCTIONS:
 5. Be concise and conversational.
 6. Always cite your sources at the end of your answer using the provided URLs.`;
 
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: "You are Memento, an AI assistant grounded in the user's browsing history and workspace. Use the conversation history to maintain context." },
-        ...(history || []).map((m: { role: "user" | "assistant"; content: string }) => ({
-          role: m.role,
-          content: m.content
-        })),
-        { role: "user", content: `USER QUESTION: ${query}\n\n${prompt}` }
-      ],
-      model: CHAT_MODEL,
-      temperature: 0, 
-    });
+    const conversationTranscript = (history || [])
+      .map(
+        (m: { role: "user" | "assistant"; content: string }) =>
+          `${m.role}: ${m.content}`,
+      )
+      .join("\n");
 
-    const answer = chatCompletion.choices[0]?.message?.content || "I'm sorry, I couldn't generate an answer.";
+    const chatResponse = await generateChatText(
+      `Conversation History:
+${conversationTranscript || "No prior conversation."}
+
+USER QUESTION: ${query}
+
+${prompt}`,
+      {
+        systemInstruction:
+          "You are Memento, an AI assistant grounded in the user's browsing history and workspace. Use the conversation history to maintain context.",
+        temperature: 0,
+      },
+    );
+
+    console.log("Chat API: Answer generated with model:", chatResponse.model);
+
+    const answer = chatResponse.text || "I'm sorry, I couldn't generate an answer.";
 
     // 5. Final response
-    return NextResponse.json({
-      answer,
-      sources: sources.map(s => ({
-        ...s,
-        voiceNotes: voiceNotesMap.get(s.id) || []
-      }))
-    }, { headers: corsHeaders });
+    return NextResponse.json(
+      {
+        answer,
+        sources: sources.map(s => ({
+          ...s,
+          voiceNotes: voiceNotesMap.get(s.id) || []
+        }))
+      },
+      { headers: corsHeaders },
+    );
 
   } catch (error: unknown) {
     const message = getErrorMessage(error);

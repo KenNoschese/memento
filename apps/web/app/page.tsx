@@ -13,9 +13,11 @@ import {
   ExternalLink,
   Folder as FolderIcon,
   Loader2,
+  Moon,
   Play,
   Plus,
   Sparkles,
+  Sun,
   Tag,
   Trash2,
 } from "lucide-react";
@@ -42,6 +44,55 @@ function formatTimestamp(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function ThemeToggle() {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== "undefined") {
+      return document.documentElement.classList.contains("dark");
+    }
+    return false;
+  });
+
+  const toggleTheme = () => {
+    const root = window.document.documentElement;
+    if (isDark) {
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    } else {
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    }
+    setIsDark(!isDark);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-(--line) bg-(--surface) text-(--muted) transition-all hover:border-(--accent-edge) hover:text-(--accent) active:scale-95"
+      aria-label="Toggle theme"
+    >
+      <div className="relative h-5 w-5">
+        <Sun
+          size={20}
+          className={`absolute inset-0 transition-all duration-500 ${
+            isDark
+              ? "rotate-90 scale-0 opacity-0"
+              : "rotate-0 scale-100 opacity-100"
+          }`}
+        />
+        <Moon
+          size={20}
+          className={`absolute inset-0 transition-all duration-500 ${
+            isDark
+              ? "rotate-0 scale-100 opacity-100"
+              : "-rotate-90 scale-0 opacity-0"
+          }`}
+        />
+      </div>
+    </button>
+  );
 }
 
 function SectionLabel({
@@ -400,7 +451,7 @@ function LandingView({
                 <div
                   className={`max-w-[85%] rounded-2xl px-5 py-4 ${
                     msg.role === "user"
-                      ? "bg-(--accent) text-white"
+                      ? "bg-(--accent) text-white dark:bg-(--accent-edge) dark:text-white"
                       : "bg-(--surface) text-foreground border border-(--line)"
                   }`}
                 >
@@ -509,13 +560,29 @@ export default function Dashboard() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [chatMessages, setChatMessages] = useState<
-    { role: "user" | "assistant"; content: string; sources?: PageMemoryRecord[] }[]
+    {
+      role: "user" | "assistant";
+      content: string;
+      sources?: PageMemoryRecord[];
+    }[]
   >([]);
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [draggedMemoryId, setDraggedMemoryId] = useState<string | null>(null);
   const [playingVoiceNoteId, setPlayingVoiceNoteId] = useState<string | null>(
     null,
   );
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else if (savedTheme === "light") {
+      document.documentElement.classList.remove("dark");
+    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
@@ -631,7 +698,8 @@ export default function Dashboard() {
           ...prev,
           {
             role: "assistant",
-            content: "I'm sorry, I encountered an error while processing your request.",
+            content:
+              "I'm sorry, I encountered an error while processing your request.",
           },
         ]);
       } finally {
@@ -1252,6 +1320,9 @@ export default function Dashboard() {
         </aside>
 
         <main className="min-w-0 flex-1 lg:h-screen lg:overflow-y-auto">
+          <div className="absolute right-6 top-6 z-50">
+            <ThemeToggle />
+          </div>
           {selectedMemory ? (
             <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
               <section className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">

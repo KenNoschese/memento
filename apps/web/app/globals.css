@@ -16,6 +16,22 @@
   --accent-edge: #d7bea6;
 }
 
+.dark {
+  --background: #1a1614;
+  --foreground: #f5f1eb;
+  --foreground-soft: #dcd4ce;
+  --surface: #26211c;
+  --surface-soft: #2d2722;
+  --surface-strong: #362e29;
+  --line: #3d342d;
+  --muted: #a3958c;
+  --muted-strong: #c2b7af;
+  --accent: #d7bea6;
+  --accent-strong: #e7ddd1;
+  --accent-soft: #3d342d;
+  --accent-edge: #8f6440;
+}
+
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
