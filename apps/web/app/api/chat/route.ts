@@ -215,7 +215,7 @@ Standalone search query:`;
       .not("tags", "is", null);
     
     const allTags = new Set<string>();
-    (tagData || []).forEach(m => m.tags?.forEach(t => allTags.add(t)));
+    (tagData || []).forEach((m: any) => m.tags?.forEach((t: string) => allTags.add(t)));
 
     const workspaceSummary = {
       folders: (workspaceFolders || []).map(f => ({
@@ -249,7 +249,10 @@ Standalone search query:`;
       const notes = voiceNotesMap.get(source.id) || [];
       const notesContext = notes.map(n => {
         const analysis = normalizeVoiceNoteAnalysis(n.analysis);
-        return `- Voice Note: "${n.content}"\n  Summary: ${n.summary}\n  Key insights: ${analysis.summary}`;
+        const insights = analysis 
+          ? `Action items: ${analysis.action_items.join("; ") || "none"}. Decisions: ${analysis.decisions.join("; ") || "none"}.`
+          : "No detailed analysis.";
+        return `- Voice Note: "${n.content}"\n  Summary: ${n.summary}\n  Key insights: ${insights}`;
       }).join("\n");
 
       return `[Source ${idx + 1}]
