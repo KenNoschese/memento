@@ -166,8 +166,9 @@ Main files:
 
 ### Briefing Flow
 1. The dashboard requests `/api/briefing`.
-2. The server fetches recent memories from Supabase.
-3. It summarizes recent activity with Gemini 1.5 Flash.
+2. The server checks a persistent per-user cache in Supabase plus a short in-process cache.
+3. On a cache miss, it fetches recent memories from Supabase.
+4. It summarizes recent activity with Groq `llama-3.1-8b-instant` unless `GROQ_BRIEFING_MODEL` overrides it.
 4. The dashboard displays the summary and recent URLs.
 
 Main files:
@@ -193,6 +194,7 @@ Main files:
 - The active search RPC expects **3072-dimensional embeddings** (Gemini `gemini-embedding-001` default).
 - Memory records persist a real `type` enum with values `page` and `voice_note`.
 - Memory writes persist a dedupe key and are expected to be idempotent for exact retries.
+- Briefing responses can be cached in `api_cache`, keyed per user and invalidated when the user memory count or latest memory timestamp changes.
 - The repo contains `supabase/migrate_memories_contract.sql` as the current authoritative schema.
 - Memory records currently rely on:
   - `url`

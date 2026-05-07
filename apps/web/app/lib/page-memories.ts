@@ -6,6 +6,9 @@ export type PageMemoryRow = {
   url: string;
   canonical_url: string;
   title: string | null;
+  content?: string | null;
+  summary?: string | null;
+  tags?: string[] | null;
   dedupe_key: string | null;
   is_placeholder: boolean;
 };
@@ -31,7 +34,9 @@ export async function findPageMemoryByCanonicalUrl(
 ): Promise<PageMemoryRow | null> {
   const query = supabase
     .from("memories")
-    .select("id, url, canonical_url, title, dedupe_key, is_placeholder")
+    .select(
+      "id, url, canonical_url, title, content, summary, tags, dedupe_key, is_placeholder",
+    )
     .eq("type", "page")
     .eq("canonical_url", canonicalUrl);
   const { data, error } = await query.maybeSingle<PageMemoryRow>();
@@ -80,7 +85,9 @@ export async function ensurePageMemoryAttachment(
         user_id: input.userId,
       },
     ])
-    .select("id, url, canonical_url, title, dedupe_key, is_placeholder");
+    .select(
+      "id, url, canonical_url, title, content, summary, tags, dedupe_key, is_placeholder",
+    );
   const { data, error } = await insertQuery.single<PageMemoryRow>();
 
   if (!error) {

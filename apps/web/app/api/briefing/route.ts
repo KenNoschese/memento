@@ -11,11 +11,26 @@ const supabase = createClient(
 );
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const BRIEFING_MODEL = "llama-3.1-8b-instant";
+const BRIEFING_MODEL =
+  process.env.GROQ_BRIEFING_MODEL || "llama-3.1-8b-instant";
 
 // Simple in-memory cache, scoped per user id
 const cachedBriefing: Map<string, { data: BriefingResponse; timestamp: number }> = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const PERSISTENT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const BRIEFING_CACHE_KEY_PREFIX = "briefing";
+
+type BriefingCacheRow = {
+  cache_key: string;
+  payload: BriefingResponse;
+  source_count: number;
+  source_updated_at: string | null;
+  expires_at: string;
+};
+
+function buildBriefingCacheKey(userId: string): string {
+  return `${BRIEFING_CACHE_KEY_PREFIX}:${userId}`;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,6 +69,57 @@ export async function GET(req: Request) {
     if (!process.env.GROQ_API_KEY) {
       console.error("Briefing API: GROQ_API_KEY is missing");
       return NextResponse.json({ error: "Server configuration error" }, { status: 500, headers: corsHeaders });
+    }
+
+    const { count: memoryCount, error: memoryCountError } = await supabase
+      .from("memories")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", memento_user_id);
+
+    if (memoryCountError) {
+      console.error("Briefing API: Memory count error:", memoryCountError.message);
+      throw memoryCountError;
+    }
+
+    const { data: latestMemory, error: latestMemoryError } = await supabase
+      .from("memories")
+      .select("created_at")
+      .eq("user_id", memento_user_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestMemoryError) {
+      console.error("Briefing API: Latest memory fetch error:", latestMemoryError.message);
+      throw latestMemoryError;
+    }
+
+    const currentSourceCount = memoryCount ?? 0;
+    const currentSourceUpdatedAt = latestMemory?.created_at ?? null;
+    const cacheKey = buildBriefingCacheKey(memento_user_id);
+
+    const { data: persistentCache, error: persistentCacheError } = await supabase
+      .from("api_cache")
+      .select("cache_key, payload, source_count, source_updated_at, expires_at")
+      .eq("cache_key", cacheKey)
+      .maybeSingle<BriefingCacheRow>();
+
+    if (persistentCacheError) {
+      console.warn("Briefing API: Persistent cache read failed:", persistentCacheError.message);
+    }
+
+    if (
+      persistentCache &&
+      new Date(persistentCache.expires_at).getTime() > Date.now() &&
+      persistentCache.source_count === currentSourceCount &&
+      persistentCache.source_updated_at === currentSourceUpdatedAt
+    ) {
+      cachedBriefing.set(memento_user_id, {
+        data: persistentCache.payload,
+        timestamp: Date.now(),
+      });
+      console.log("Briefing API: Returning persistent cached briefing for user:", memento_user_id);
+      return NextResponse.json(persistentCache.payload, { headers: corsHeaders });
     }
 
     console.log("Briefing API: Fetching recent memories for user:", memento_user_id);
@@ -152,6 +218,22 @@ export async function GET(req: Request) {
 
     // Update cache
     cachedBriefing.set(memento_user_id, { data: response, timestamp: Date.now() });
+    const { error: cacheWriteError } = await supabase.from("api_cache").upsert(
+      {
+        cache_key: cacheKey,
+        cache_group: BRIEFING_CACHE_KEY_PREFIX,
+        user_id: memento_user_id,
+        payload: response,
+        source_count: currentSourceCount,
+        source_updated_at: currentSourceUpdatedAt,
+        expires_at: new Date(Date.now() + PERSISTENT_CACHE_TTL_MS).toISOString(),
+      },
+      { onConflict: "cache_key" },
+    );
+
+    if (cacheWriteError) {
+      console.warn("Briefing API: Persistent cache write failed:", cacheWriteError.message);
+    }
 
     return NextResponse.json(response, { headers: corsHeaders });
 

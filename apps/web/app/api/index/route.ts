@@ -83,6 +83,34 @@ export async function POST(req: Request) {
       );
     }
 
+    if (
+      existingPage &&
+      !existingPage.is_placeholder &&
+      normalizeExtractedText(existingPage.content) === normalizedContent
+    ) {
+      const { error: metadataUpdateError } = await supabase
+        .from("memories")
+        .update({
+          url,
+          canonical_url: canonicalUrl,
+          title,
+          content: normalizedContent,
+          dedupe_key: dedupeKey,
+          user_id: resolvedUserId,
+        })
+        .eq("id", existingPage.id);
+
+      if (metadataUpdateError) {
+        console.error("API: Metadata-only page update failed:", metadataUpdateError.message);
+        throw metadataUpdateError;
+      }
+
+      return NextResponse.json(
+        { message: "Existing page content reused" },
+        { status: 200, headers: corsHeaders },
+      );
+    }
+
     let embedding: number[];
     try {
       console.log("API: Generating 3072-dim embedding with gemini-embedding-001...");
