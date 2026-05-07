@@ -38,3 +38,6 @@ benchmark/
 
 # Plasmo
 .plasmo/
+
+# TypeScript
+*.tsbuildinfo

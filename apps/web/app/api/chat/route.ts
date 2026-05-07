@@ -5,6 +5,10 @@ import { getErrorMessage } from "@/app/lib/errors";
 import { normalizeVoiceNoteAnalysis } from "@/app/lib/voice-note-analysis";
 import type { PageMemoryRecord, VoiceNoteRecord } from "@/app/lib/types";
 
+type MemoryTagsRow = {
+  tags: string[] | null;
+};
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -215,7 +219,9 @@ Standalone search query:`;
       .not("tags", "is", null);
     
     const allTags = new Set<string>();
-    (tagData || []).forEach((m: any) => m.tags?.forEach((t: string) => allTags.add(t)));
+    (tagData || []).forEach((memory: MemoryTagsRow) => {
+      memory.tags?.forEach((tag) => allTags.add(tag));
+    });
 
     const workspaceSummary = {
       folders: (workspaceFolders || []).map(f => ({
