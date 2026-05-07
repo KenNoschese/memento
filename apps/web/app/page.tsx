@@ -1877,7 +1877,7 @@ export default function Dashboard() {
                 </div>
               </section>
 
-              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(18rem,0.88fr)]">
+              <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(18rem,0.88fr)]">
                 <section className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
                   <SectionLabel icon={<Sparkles size={14} />}>
                     Page Summary
@@ -1941,7 +1941,7 @@ export default function Dashboard() {
                   ) : null}
                 </section>
 
-                <aside className="rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
+                <aside className="self-start rounded-2xl border border-(--line) bg-(--surface) p-6 shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <SectionLabel icon={<Play size={14} />}>
                       Voice Notes

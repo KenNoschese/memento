@@ -21,6 +21,16 @@ chrome.runtime.onInstalled.addListener(() => {
 let isRecording = false
 let lastStartTime = 0
 let lastStopTime = 0
+let lastKnownTabContext: {
+  url: string
+  title: string
+  hostname: string
+} | null = null
+let recordingTabContext: {
+  url: string
+  title: string
+  hostname: string
+} | null = null
 const COMMAND_DEBOUNCE_MS = 1000
 
 // URL blocking for privacy/stability: protocols and hosts we should never record
@@ -51,6 +61,38 @@ const isUrlBlocked = (rawUrl?: string) => {
 
 const storage = new Storage()
 const POPUP_STATUS_STORAGE_KEY = "popupStatus"
+const RECORDING_SESSION_STORAGE_KEY = "recordingSession"
+
+const toTabContext = (tab: chrome.tabs.Tab | null | undefined) => {
+  if (!tab?.url) {
+    return null
+  }
+
+  try {
+    const url = new URL(tab.url)
+    return {
+      url: tab.url,
+      title: tab.title ?? "Untitled page",
+      hostname: url.hostname
+    }
+  } catch (error) {
+    return {
+      url: tab.url,
+      title: tab.title ?? "Untitled page",
+      hostname: ""
+    }
+  }
+}
+
+const rememberTabContext = (tab: chrome.tabs.Tab | null | undefined) => {
+  const context = toTabContext(tab)
+  if (!context || isUrlBlocked(context.url)) {
+    return null
+  }
+
+  lastKnownTabContext = context
+  return context
+}
 
 const getStoredPopupStatus = async () => {
   const result = await chrome.storage.local.get([POPUP_STATUS_STORAGE_KEY])
@@ -59,6 +101,38 @@ const getStoredPopupStatus = async () => {
     lastVoiceNote?: OperationStatus
     hasMicPermission?: boolean | "unknown"
   }
+}
+
+const getStoredRecordingSession = async () => {
+  const result = await chrome.storage.local.get([RECORDING_SESSION_STORAGE_KEY])
+  const session = (result[RECORDING_SESSION_STORAGE_KEY] ?? null) as
+    | {
+        isRecording: boolean
+        tabContext: {
+          url: string
+          title: string
+          hostname: string
+        } | null
+      }
+    | null
+  console.log("Background: getStoredRecordingSession", session)
+  return session
+}
+
+const setStoredRecordingSession = async (
+  session: {
+    isRecording: boolean
+    tabContext: {
+      url: string
+      title: string
+      hostname: string
+    } | null
+  } | null
+) => {
+  console.log("Background: setStoredRecordingSession", session)
+  await chrome.storage.local.set({
+    [RECORDING_SESSION_STORAGE_KEY]: session
+  })
 }
 
 const setStoredPopupStatus = async (
@@ -168,6 +242,7 @@ const getActiveBrowserTab = async () => {
     })
 
     if (tab) {
+      rememberTabContext(tab)
       return tab
     }
   }
@@ -179,44 +254,68 @@ const getActiveTabDetails = async () => {
   const tab = await getActiveBrowserTab()
 
   if (!tab?.url) {
-    return null
+    return lastKnownTabContext
   }
 
-  try {
-    const url = new URL(tab.url)
-    return {
-      url: tab.url,
-      title: tab.title ?? "Untitled page",
-      hostname: url.hostname
-    }
-  } catch (error) {
-    return {
-      url: tab.url,
-      title: tab.title ?? "Untitled page",
-      hostname: ""
-    }
-  }
+  return rememberTabContext(tab)
 }
 
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    rememberTabContext(tab)
+  } catch (error) {
+    // ignore transient tab lookup failures
+  }
+})
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url || changeInfo.title || changeInfo.status === "complete") {
+    rememberTabContext(tab)
+  }
+})
+
 const getPopupState = async () => {
-  const [popupStatus, activeTab, apiBaseUrl, userId, settings] = await Promise.all([
+  const [popupStatus, activeTab, apiBaseUrl, userId, settings, recordingSession] = await Promise.all([
     getStoredPopupStatus(),
     getActiveTabDetails(),
     getApiBaseUrl(),
     getOrCreateUserId(),
-    chrome.storage.local.get(["isIndexingEnabled"])
+    chrome.storage.local.get(["isIndexingEnabled"]),
+    getStoredRecordingSession()
   ])
+  const effectiveIsRecording = recordingSession?.isRecording ?? isRecording
+  const effectiveRecordingTab =
+    recordingSession?.tabContext ?? recordingTabContext
   const pageState = await getPageStatus(activeTab?.url)
+  const visibleTab =
+    effectiveIsRecording && effectiveRecordingTab
+      ? effectiveRecordingTab
+      : activeTab
+  const visiblePageState =
+    effectiveIsRecording && effectiveRecordingTab
+      ? await getPageStatus(effectiveRecordingTab.url)
+      : pageState
+
+  console.log("Background: getPopupState", {
+    inMemoryIsRecording: isRecording,
+    inMemoryRecordingTabContext: recordingTabContext,
+    lastKnownTabContext,
+    activeTab,
+    recordingSession,
+    visibleTab,
+    visiblePageState
+  })
 
   return {
-    isRecording,
+    isRecording: effectiveIsRecording,
     isIndexingEnabled: settings.isIndexingEnabled !== false,
     hasMicPermission: popupStatus.hasMicPermission ?? "unknown",
     apiBaseUrl,
     userId,
-    activeTab,
-    pageStatus: pageState.pageStatus,
-    pageStatusReason: pageState.pageStatusReason,
+    activeTab: visibleTab,
+    pageStatus: visiblePageState.pageStatus,
+    pageStatusReason: visiblePageState.pageStatusReason,
     lastIndex: popupStatus.lastIndex,
     lastVoiceNote: popupStatus.lastVoiceNote
   }
@@ -227,12 +326,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target !== "background") return
   
   if (message.type === "start-record") {
-    void startRecording()
+    console.log("Background: received start-record")
+    void (async () => {
+      try {
+        await startRecording()
+        sendResponse({ ok: true })
+      } catch (error) {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to start recording"
+        })
+      }
+    })()
+    return true
   } else if (message.type === "stop-record") {
-    void stopRecording()
+    console.log("Background: received stop-record")
+    void (async () => {
+      try {
+        await stopRecording()
+        sendResponse({ ok: true })
+      } catch (error) {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to stop recording"
+        })
+      }
+    })()
+    return true
   } else if (message.type === "recording-finished") {
+    console.log("Background: received recording-finished")
     isRecording = false
+    recordingTabContext = null
     chrome.action.setBadgeText({ text: "" })
+    void setStoredRecordingSession(null)
     void setStoredPopupStatus({
       lastVoiceNote: {
         ok: true,
@@ -243,7 +369,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.type === "recording-failed") {
     console.error("Background: Recording failed reported:", message.error)
     isRecording = false
+    recordingTabContext = null
     chrome.action.setBadgeText({ text: "ERR" })
+    void setStoredRecordingSession(null)
     void setStoredPopupStatus({
       lastVoiceNote: {
         ok: false,
@@ -254,25 +382,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3000)
     void teardownOffscreen()
   } else if (message.type === "microphone-permission-result") {
+    console.log("Background: received microphone-permission-result", {
+      granted: message.granted
+    })
     void setStoredPopupStatus({
       hasMicPermission: message.granted ? true : false
     })
     sendResponse({ ok: true })
   } else if (message.type === "get-popup-state") {
+    console.log("Background: received get-popup-state")
     void (async () => {
       try {
         sendResponse(await getPopupState())
       } catch (error) {
         console.error("Background: Failed to build popup state:", error)
+        const recordingSession = await getStoredRecordingSession()
         sendResponse({
-          isRecording,
+          isRecording: recordingSession?.isRecording ?? isRecording,
           isIndexingEnabled: true,
           hasMicPermission: "unknown",
           apiBaseUrl: await getApiBaseUrl(),
           userId: await getOrCreateUserId(),
-          activeTab: null,
-          pageStatus: "unsupported",
-          pageStatusReason: "Unable to load popup state"
+          activeTab: recordingSession?.tabContext ?? null,
+          pageStatus:
+            recordingSession?.isRecording && recordingSession.tabContext
+              ? "eligible"
+              : "unsupported",
+          pageStatusReason:
+            recordingSession?.isRecording && recordingSession.tabContext
+              ? "Recording is in progress for this page"
+              : "Unable to load popup state"
         })
       }
     })()
@@ -342,6 +481,11 @@ chrome.commands.onCommand.addListener(async (command) => {
 })
 
 async function startRecording() {
+  console.log("Background: startRecording begin", {
+    isRecording,
+    recordingTabContext,
+    lastKnownTabContext
+  })
   const now = Date.now()
   if (now - lastStartTime < COMMAND_DEBOUNCE_MS) {
     return
@@ -355,8 +499,17 @@ async function startRecording() {
 
   try {
     const tab = await getActiveBrowserTab()
-    
-    if (!tab?.url || tab.url.startsWith("chrome://")) {
+
+    const resolvedTabContext = tab?.url
+      ? rememberTabContext(tab)
+      : lastKnownTabContext
+
+    console.log("Background: startRecording resolved tab", {
+      tab,
+      resolvedTabContext
+    })
+
+    if (!resolvedTabContext || resolvedTabContext.url.startsWith("chrome://")) {
       console.warn("Cannot record on this page:", tab?.url)
       isRecording = false
       chrome.action.setBadgeText({ text: "NA" })
@@ -365,15 +518,22 @@ async function startRecording() {
     }
 
     // Additional blocked URL checks (chrome-extension://, file://, about:, data:, localhost)
-    if (isUrlBlocked(tab.url)) {
-      console.warn("Cannot record on blocked/unsupported URL:", tab.url)
+    if (isUrlBlocked(resolvedTabContext.url)) {
+      console.warn("Cannot record on blocked/unsupported URL:", resolvedTabContext.url)
       isRecording = false
       chrome.action.setBadgeText({ text: "NA" })
       setTimeout(() => chrome.action.setBadgeText({ text: "" }), 2000)
       return
     }
 
+    recordingTabContext = resolvedTabContext
+    await setStoredRecordingSession({
+      isRecording: true,
+      tabContext: resolvedTabContext
+    })
+
     await setupOffscreen()
+    console.log("Background: startRecording offscreen ready")
     
     let attempts = 0
     const sendMessage = async () => {
@@ -387,12 +547,14 @@ async function startRecording() {
         await chrome.runtime.sendMessage({ 
           type: "start-recording", 
           target: "offscreen", 
-          url: tab.url,
-          title: tab.title ?? "",
+          url: resolvedTabContext.url,
+          title: resolvedTabContext.title ?? "",
           userId
         })
+        console.log("Background: delivered start-recording to offscreen")
         return true
       } catch (e) {
+        console.warn("Background: failed delivering start-recording", e)
         return false
       }
     }
@@ -405,6 +567,8 @@ async function startRecording() {
     if (attempts >= 10) {
       console.error("Failed to reach offscreen document after 10 attempts")
       isRecording = false
+      recordingTabContext = null
+      await setStoredRecordingSession(null)
       chrome.action.setBadgeText({ text: "FAIL" })
       setTimeout(() => chrome.action.setBadgeText({ text: "" }), 2000)
       return
@@ -412,8 +576,11 @@ async function startRecording() {
 
     chrome.action.setBadgeText({ text: "REC" })
     chrome.action.setBadgeBackgroundColor({ color: "#FF0000" })
+    console.log("Background: startRecording success")
   } catch (error) {
     isRecording = false
+    recordingTabContext = null
+    await setStoredRecordingSession(null)
     console.error("Start recording logic error:", error)
     await setStoredPopupStatus({
       lastVoiceNote: {
@@ -428,6 +595,10 @@ async function startRecording() {
 }
 
 async function stopRecording() {
+  console.log("Background: stopRecording begin", {
+    isRecording,
+    recordingTabContext
+  })
   const now = Date.now()
   if (now - lastStopTime < COMMAND_DEBOUNCE_MS) {
     return
@@ -435,17 +606,61 @@ async function stopRecording() {
   lastStopTime = now
 
   if (!isRecording) {
-    return
+    const storedSession = await getStoredRecordingSession()
+    if (!storedSession?.isRecording) {
+      return
+    }
   }
 
   try {
-    await chrome.runtime.sendMessage({ type: "stop-recording", target: "offscreen" })
+    await setupOffscreen()
+    console.log("Background: stopRecording offscreen ready")
+
+    let attempts = 0
+    let delivered = false
+
+    while (attempts < 10 && !delivered) {
+      try {
+        await chrome.runtime.sendMessage({
+          type: "stop-recording",
+          target: "offscreen"
+        })
+        delivered = true
+        console.log("Background: delivered stop-recording to offscreen")
+      } catch (error) {
+        console.warn("Background: failed delivering stop-recording", {
+          attempts,
+          error
+        })
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        attempts++
+      }
+    }
+
+    if (!delivered) {
+      throw new Error("Unable to reach the offscreen recorder")
+    }
+
     isRecording = false
+    recordingTabContext = null
+    await setStoredRecordingSession(null)
     chrome.action.setBadgeText({ text: "" })
   } catch (error) {
     console.error("Stop recording failed:", error)
+    await setStoredPopupStatus({
+      lastVoiceNote: {
+        ok: false,
+        at: Date.now(),
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to stop recording"
+      }
+    })
   } finally {
     isRecording = false
+    recordingTabContext = null
+    await setStoredRecordingSession(null)
     chrome.action.setBadgeText({ text: "" })
   }
 }
@@ -455,6 +670,7 @@ async function setupOffscreen() {
     const contexts = await (chrome.runtime as any).getContexts({ 
       contextTypes: ["OFFSCREEN_DOCUMENT"] 
     })
+    console.log("Background: setupOffscreen contexts", contexts)
     if (contexts.length > 0) return
 
     await chrome.offscreen.createDocument({
@@ -462,6 +678,7 @@ async function setupOffscreen() {
       reasons: ["USER_MEDIA" as any],
       justification: "Recording audio for voice notes"
     })
+    console.log("Background: setupOffscreen created document")
   } catch (error: any) {
     if (!error.message.includes("Only a single offscreen document may be created")) {
       console.error("Offscreen creation failed:", error)
@@ -475,6 +692,7 @@ async function teardownOffscreen() {
     const contexts = await (chrome.runtime as any).getContexts({
       contextTypes: ["OFFSCREEN_DOCUMENT"]
     })
+    console.log("Background: teardownOffscreen contexts", contexts)
 
     if (contexts.length === 0) return
 

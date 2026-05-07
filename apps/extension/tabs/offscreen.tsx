@@ -10,9 +10,10 @@ export default function OffscreenPage() {
   useEffect(() => {
     const handleMessage = async (message: any) => {
       if (message.target !== "offscreen") return
+      console.log("Offscreen: received message", message)
 
       if (message.type === "start-recording") {
-        startRecording(message.url, message.title, message.userId)
+        void startRecording(message.url, message.title, message.userId)
       } else if (message.type === "stop-recording") {
         stopRecording()
       }
@@ -64,12 +65,15 @@ export default function OffscreenPage() {
 
   const startRecording = async (url: string, title?: string, userId?: string) => {
     if (isCurrentlyRecording.current) {
+      console.log("Offscreen: startRecording ignored, already recording")
       return
     }
     isCurrentlyRecording.current = true
+    console.log("Offscreen: startRecording begin", { url, title, userId })
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      console.log("Offscreen: microphone stream acquired")
       chrome.runtime.sendMessage({
         type: "microphone-permission-result",
         granted: true,
@@ -90,12 +94,17 @@ export default function OffscreenPage() {
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunksRef.current.push(event.data)
+          console.log("Offscreen: data chunk", { size: event.data.size })
         }
       }
 
       mediaRecorder.onstop = async () => {
+        console.log("Offscreen: mediaRecorder.onstop", {
+          chunkCount: chunksRef.current.length
+        })
         try {
           const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" })
+          console.log("Offscreen: built audio blob", { size: audioBlob.size })
 
           if (audioBlob.size < 1000) {
             console.warn("Offscreen: Recording was too short/small. Skipping upload.")
@@ -108,6 +117,7 @@ export default function OffscreenPage() {
           }
 
           await uploadAudio(audioBlob, url, userId, title)
+          console.log("Offscreen: upload complete")
           chrome.runtime.sendMessage({ type: "recording-finished", target: "background" })
         } catch (error) {
           // Handled in uploadAudio
@@ -127,8 +137,10 @@ export default function OffscreenPage() {
       }
 
       mediaRecorder.start(1000)
+      console.log("Offscreen: mediaRecorder started")
     } catch (error) {
       isCurrentlyRecording.current = false
+      console.error("Offscreen: startRecording failed", error)
       chrome.runtime.sendMessage({
         type: "microphone-permission-result",
         granted: false,
@@ -143,6 +155,10 @@ export default function OffscreenPage() {
   }
 
   const stopRecording = () => {
+    console.log("Offscreen: stopRecording invoked", {
+      mediaRecorderState: mediaRecorderRef.current?.state,
+      isCurrentlyRecording: isCurrentlyRecording.current
+    })
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop()
     } else {

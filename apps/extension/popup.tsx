@@ -1,5 +1,7 @@
 import logo from "data-base64:~assets/logo_dark.png"
+import { Storage } from "@plasmohq/storage"
 import { useEffect, useState, type CSSProperties } from "react"
+import { getApiBaseUrl } from "./config"
 
 type OperationStatus = {
   ok: boolean
@@ -8,6 +10,15 @@ type OperationStatus = {
 }
 
 type PageStatus = "eligible" | "blocked" | "unsupported" | "paused"
+
+type RecordingSession = {
+  isRecording: boolean
+  tabContext: {
+    url: string
+    title: string
+    hostname: string
+  } | null
+}
 
 type PopupState = {
   isRecording: boolean
@@ -42,6 +53,132 @@ const palette = {
   success: "#4f7a5a",
   warning: "#b7791f",
   danger: "#b55643"
+}
+
+const storage = new Storage()
+const POPUP_STATUS_STORAGE_KEY = "popupStatus"
+const RECORDING_SESSION_STORAGE_KEY = "recordingSession"
+const DEFAULT_DENYLIST = ["localhost", "127.0.0.1"]
+const BLOCKED_PROTOCOLS = [
+  "chrome-extension:",
+  "file:",
+  "about:",
+  "data:"
+]
+const BLOCKED_HOSTS = ["localhost"]
+
+const isUrlBlocked = (rawUrl?: string) => {
+  if (!rawUrl) return true
+  try {
+    const u = new URL(rawUrl)
+    if (BLOCKED_PROTOCOLS.includes(u.protocol)) return true
+    if (BLOCKED_HOSTS.includes(u.hostname)) return true
+    return false
+  } catch (e) {
+    for (const p of BLOCKED_PROTOCOLS) if (rawUrl.startsWith(p)) return true
+    for (const h of BLOCKED_HOSTS) if (rawUrl.includes(h)) return true
+    return false
+  }
+}
+
+const getActiveBrowserTab = async () => {
+  const candidateQueries: chrome.tabs.QueryInfo[] = [
+    { active: true, lastFocusedWindow: true },
+    { active: true, currentWindow: true },
+    { active: true }
+  ]
+
+  for (const query of candidateQueries) {
+    const tabs = await chrome.tabs.query(query)
+    const tab = tabs.find((candidate) => {
+      if (!candidate.url) return false
+      return !candidate.url.startsWith("chrome-extension://")
+    })
+
+    if (tab) {
+      return tab
+    }
+  }
+
+  return null
+}
+
+const toTabContext = (tab: chrome.tabs.Tab | null | undefined) => {
+  if (!tab?.url) return null
+
+  try {
+    const url = new URL(tab.url)
+    return {
+      url: tab.url,
+      title: tab.title ?? "Untitled page",
+      hostname: url.hostname
+    }
+  } catch (error) {
+    return {
+      url: tab.url,
+      title: tab.title ?? "Untitled page",
+      hostname: ""
+    }
+  }
+}
+
+const getPageStatus = async (
+  rawUrl: string | undefined,
+  isIndexingEnabled: boolean,
+  denylist: string[]
+): Promise<{ pageStatus: PageStatus; pageStatusReason?: string }> => {
+  if (!isIndexingEnabled) {
+    return {
+      pageStatus: "paused",
+      pageStatusReason: "Auto-indexing is paused"
+    }
+  }
+
+  if (!rawUrl) {
+    return {
+      pageStatus: "unsupported",
+      pageStatusReason: "No active page detected"
+    }
+  }
+
+  try {
+    const url = new URL(rawUrl)
+
+    if (BLOCKED_PROTOCOLS.includes(url.protocol) || rawUrl.startsWith("chrome://")) {
+      return {
+        pageStatus: "unsupported",
+        pageStatusReason: "This browser page cannot be indexed or recorded"
+      }
+    }
+
+    if (BLOCKED_HOSTS.includes(url.hostname)) {
+      return {
+        pageStatus: "blocked",
+        pageStatusReason: "Local development pages are excluded"
+      }
+    }
+
+    const matchingPattern = denylist.find(
+      (pattern) => url.hostname.includes(pattern) || rawUrl.includes(pattern)
+    )
+
+    if (matchingPattern) {
+      return {
+        pageStatus: "blocked",
+        pageStatusReason: `Blocked by denylist: ${matchingPattern}`
+      }
+    }
+  } catch (error) {
+    return {
+      pageStatus: "unsupported",
+      pageStatusReason: "This URL is not supported"
+    }
+  }
+
+  return {
+    pageStatus: "eligible",
+    pageStatusReason: "This page is ready for indexing and voice notes"
+  }
 }
 
 const pageLabelByStatus: Record<PageStatus, string> = {
@@ -150,13 +287,56 @@ function IndexPopup() {
 
   const refreshState = async () => {
     try {
-      const state = await chrome.runtime.sendMessage({
-        type: "get-popup-state",
-        target: "background"
-      })
+      const [rawPopupStatus, rawRecordingSession, settings, apiBaseUrl, userId, activeTab] =
+        await Promise.all([
+          chrome.storage.local.get([POPUP_STATUS_STORAGE_KEY]),
+          chrome.storage.local.get([RECORDING_SESSION_STORAGE_KEY]),
+          chrome.storage.local.get(["isIndexingEnabled", "denylist"]),
+          getApiBaseUrl(),
+          storage.get<string>("memento_user_id"),
+          getActiveBrowserTab()
+        ])
+
+      const popupStatus = (rawPopupStatus[POPUP_STATUS_STORAGE_KEY] ?? {}) as {
+        lastIndex?: OperationStatus
+        lastVoiceNote?: OperationStatus
+        hasMicPermission?: boolean | "unknown"
+      }
+      const recordingSession = (rawRecordingSession[RECORDING_SESSION_STORAGE_KEY] ??
+        null) as RecordingSession | null
+      const activeTabContext = toTabContext(activeTab)
+      const visibleTab =
+        recordingSession?.isRecording && recordingSession.tabContext
+          ? recordingSession.tabContext
+          : activeTabContext
+      const resolvedUserId =
+        userId || `user-${crypto.randomUUID().slice(0, 8)}`
+
+      if (!userId) {
+        await storage.set("memento_user_id", resolvedUserId)
+      }
+
+      const isIndexingEnabled = settings.isIndexingEnabled !== false
+      const denylist = (settings.denylist as string[] | undefined) ?? DEFAULT_DENYLIST
+      const pageState = await getPageStatus(visibleTab?.url, isIndexingEnabled, denylist)
+
+      const state: PopupState = {
+        isRecording: recordingSession?.isRecording ?? false,
+        isIndexingEnabled,
+        hasMicPermission: popupStatus.hasMicPermission ?? "unknown",
+        apiBaseUrl,
+        userId: resolvedUserId,
+        activeTab: visibleTab,
+        pageStatus: pageState.pageStatus,
+        pageStatusReason: pageState.pageStatusReason,
+        lastIndex: popupStatus.lastIndex,
+        lastVoiceNote: popupStatus.lastVoiceNote
+      }
+      console.log("Popup: refreshState", state)
       setPopupState(state)
       setErrorMessage(null)
     } catch (error) {
+      console.error("Popup: refreshState failed", error)
       setErrorMessage("Unable to load extension state")
     } finally {
       setIsLoading(false)
@@ -211,13 +391,16 @@ function IndexPopup() {
   const sendRecordingAction = async (type: "start-record" | "stop-record") => {
     setIsWorking(true)
     setErrorMessage(null)
+    console.log("Popup: sendRecordingAction", { type, popupState })
 
     try {
-      await chrome.runtime.sendMessage({
+      const response = await chrome.runtime.sendMessage({
         type,
         target: "background"
       })
+      console.log("Popup: sendRecordingAction response", { type, response })
     } catch (error) {
+      console.error("Popup: sendRecordingAction failed", { type, error })
       setErrorMessage(
         type === "start-record"
           ? "Unable to start recording"
@@ -318,10 +501,19 @@ function IndexPopup() {
     )
   }
 
-  const pageStatus = popupState?.pageStatus ?? "unsupported"
+  const pageStatus =
+    popupState?.isRecording && popupState?.activeTab
+      ? "eligible"
+      : popupState?.pageStatus ?? "unsupported"
   const statusTone = pageToneByStatus[pageStatus]
-  const pageTitle = popupState?.activeTab?.title?.trim() || "No active page"
-  const pageHost = popupState?.activeTab?.hostname || "Open a regular web page"
+  const pageTitle =
+    popupState?.activeTab?.title?.trim() ||
+    (popupState?.isRecording ? "Recording in progress" : "No active page")
+  const pageHost =
+    popupState?.activeTab?.hostname ||
+    (popupState?.isRecording
+      ? "Keeping the recorder session active"
+      : "Open a regular web page")
 
   return (
     <div style={rootStyle}>
