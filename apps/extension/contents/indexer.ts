@@ -3,31 +3,65 @@ import { Storage } from "@plasmohq/storage"
 
 const storage = new Storage()
 
-// Prevent duplicate indexing runs for the same page
-let isIndexed = false
-
 // SPA debounce (ms). Can be overridden by chrome.storage.local.spaDebounceMs
 let SPA_DEBOUNCE_MS = 2000
+const URL_POLL_INTERVAL_MS = 1000
 
-// Helper: trigger indexing only if we haven't already
-const triggerIndexIfNotIndexed = async () => {
-  if (isIndexed) {
+let lastObservedUrl = window.location.href
+let lastSuccessfullyIndexedUrl = ""
+let inFlightIndexUrl = ""
+let pendingIndexTimer: number | null = null
+
+const clearPendingIndexTimer = () => {
+  if (pendingIndexTimer !== null) {
+    window.clearTimeout(pendingIndexTimer)
+    pendingIndexTimer = null
+  }
+}
+
+const hasIndexedUrl = (url: string) => lastSuccessfullyIndexedUrl === url
+
+// Helper: trigger indexing only if we haven't already indexed this URL
+const triggerIndexForUrl = async (url: string) => {
+  if (window.location.href !== url) return
+
+  if (hasIndexedUrl(url) || inFlightIndexUrl === url) {
     try {
       console.debug("Memento: Index suppressed; already indexed", {
-        url: window.location.href
+        url
       })
       chrome.runtime.sendMessage?.({
         type: "telemetry",
         event: "index_suppressed",
-        url: window.location.href
+        url
       })
     } catch (e) {
       // best-effort, ignore
     }
     return
   }
-  await extractAndSend()
-  isIndexed = true
+
+  inFlightIndexUrl = url
+  try {
+    const ok = await extractAndSend(url)
+    if (ok) {
+      lastSuccessfullyIndexedUrl = url
+    }
+  } finally {
+    if (inFlightIndexUrl === url) {
+      inFlightIndexUrl = ""
+    }
+  }
+}
+
+const scheduleIndex = (url: string, delayMs: number) => {
+  clearPendingIndexTimer()
+  pendingIndexTimer = window.setTimeout(() => {
+    pendingIndexTimer = null
+    void triggerIndexForUrl(url).catch((e) =>
+      console.error("Memento: Scheduled index failed", e)
+    )
+  }, delayMs)
 }
 
 // SPA support: emit a synthetic event when history changes (pushState/replaceState)
@@ -48,26 +82,24 @@ const patchHistoryMethods = () => {
 }
 
 // Debounced handler to index when URL changes in SPAs
-let lastIndexedUrl = ""
 const handleLocationChange = () => {
   const href = window.location.href
-  if (href === lastIndexedUrl) return
-  lastIndexedUrl = href
+  if (href === lastObservedUrl) return
+  lastObservedUrl = href
+
   // give SPA content a moment to render
-  setTimeout(() => {
-    triggerIndexIfNotIndexed().catch((e) =>
-      console.error("SPA index failed", e)
-    )
-  }, SPA_DEBOUNCE_MS)
+  scheduleIndex(href, SPA_DEBOUNCE_MS)
 }
 
 // Emergency index when user navigates away or hides the page
 const handleVisibilityOrUnload = () => {
-  if (isIndexed) return
+  const href = window.location.href
+  if (hasIndexedUrl(href) || inFlightIndexUrl === href) return
+
+  clearPendingIndexTimer()
   try {
     // best-effort immediate indexing
-    extractAndSend().catch(() => {})
-    isIndexed = true
+    void triggerIndexForUrl(href).catch(() => {})
   } catch (e) {
     // ignore
   }
@@ -101,6 +133,7 @@ const setupAdditionalIndexing = () => {
     patchHistoryMethods()
     window.addEventListener("popstate", handleLocationChange)
     window.addEventListener("locationchange", handleLocationChange)
+    window.setInterval(handleLocationChange, URL_POLL_INTERVAL_MS)
 
     // If the page becomes hidden or is about to unload, attempt an immediate index
     document.addEventListener("visibilitychange", () => {
@@ -112,11 +145,19 @@ const setupAdditionalIndexing = () => {
   }
 }
 
-const extractAndSend = async () => {
+const extractAndSend = async (targetUrl: string) => {
   // 0. Check settings and context
   if (!chrome.runtime?.id) {
     console.warn("Memento: Extension context invalidated.")
-    return
+    return false
+  }
+
+  if (window.location.href !== targetUrl) {
+    console.debug("Memento: URL changed before extraction started.", {
+      targetUrl,
+      currentUrl: window.location.href
+    })
+    return false
   }
 
   try {
@@ -132,11 +173,11 @@ const extractAndSend = async () => {
 
     if (!isEnabled) {
       console.log("Memento: Indexing is disabled. Skipping.")
-      return
+      return false
     }
 
-    const currentUrl = window.location.href
-    const hostname = window.location.hostname
+    const currentUrl = targetUrl
+    const { hostname } = new URL(currentUrl)
 
     const isBlocked = denylist.some(
       (pattern) => hostname.includes(pattern) || currentUrl.includes(pattern)
@@ -146,7 +187,7 @@ const extractAndSend = async () => {
       console.log(
         `Memento: URL "${currentUrl}" matches denylist pattern. Skipping.`
       )
-      return
+      return false
     }
 
     console.log("Memento: Starting extraction...")
@@ -173,7 +214,7 @@ const extractAndSend = async () => {
         target: "background",
         type: "index-page",
         payload: {
-          url: window.location.href,
+          url: currentUrl,
           title: article.title,
           content: article.textContent
         }
@@ -181,27 +222,37 @@ const extractAndSend = async () => {
 
       if (response?.ok) {
         console.log("Memento: Successfully indexed page.")
+        return true
       } else {
         console.error(
           "Memento: Background indexing returned error:",
           response?.status ?? response?.error ?? "unknown"
         )
+        return false
       }
     } else {
       console.warn(
         "Memento: Readability could not find any content on this page."
       )
+      return false
     }
   } catch (error) {
     console.error("Memento: Error during indexing process:", error)
+    return false
   }
 }
 
 // The 5 second rule
-window.addEventListener("load", () => {
+const scheduleInitialIndex = () => {
   console.log("Memento: Content script loaded. Timer started (5s)...")
-  setTimeout(extractAndSend, 5000)
-})
+  scheduleIndex(window.location.href, 5000)
+}
+
+if (document.readyState === "complete") {
+  scheduleInitialIndex()
+} else {
+  window.addEventListener("load", scheduleInitialIndex, { once: true })
+}
 
 // Additional indexing listeners to support SPAs and quick exits
 setupAdditionalIndexing()
