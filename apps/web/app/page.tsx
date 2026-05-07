@@ -187,6 +187,56 @@ function SidebarFilterButton({
   );
 }
 
+function ConfirmDeleteDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  isWorking,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  isWorking: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl border border-(--line) bg-(--surface) p-6 shadow-2xl">
+        <div className="text-lg font-semibold text-foreground">{title}</div>
+        <p className="mt-3 text-sm leading-7 text-(--muted)">{description}</p>
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isWorking}
+            className="inline-flex items-center justify-center rounded-full border border-(--line) bg-(--surface) px-4 py-2.5 text-sm text-(--muted) transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isWorking}
+            className="inline-flex min-w-28 items-center justify-center gap-2 rounded-full bg-[#a44d3f] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#8d4034] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isWorking ? <Loader2 size={15} className="animate-spin" /> : null}
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MemoryListItem({
   memory,
   signal,
@@ -674,6 +724,15 @@ export default function Dashboard() {
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [deletingMemoryId, setDeletingMemoryId] = useState<string | null>(null);
+  const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
+  const [confirmDeleteState, setConfirmDeleteState] = useState<
+    | {
+        kind: "memory" | "folder";
+        id: string;
+        label: string;
+      }
+    | null
+  >(null);
   const [expandedVoiceNoteIds, setExpandedVoiceNoteIds] = useState<string[]>(
     [],
   );
@@ -909,70 +968,132 @@ export default function Dashboard() {
     }
   }, [userId]);
 
-  const handleDeleteMemory = useCallback(
-    async (memoryId: string, label: string) => {
-      const confirmed = window.confirm(`Delete "${label}" from your memories?`);
+  const deleteMemoryById = useCallback(async (memoryId: string) => {
+    setDeletingMemoryId(memoryId);
 
-      if (!confirmed) {
-        return;
+    try {
+      const response = await fetch("/api/memories", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memoryId }),
+      });
+      const data = (await response.json()) as
+        | { success: boolean }
+        | { error: string };
+
+      if (!response.ok || "error" in data) {
+        throw new Error("error" in data ? data.error : "Delete failed");
       }
 
-      setDeletingMemoryId(memoryId);
+      setMemories((current) => {
+        const next: PageMemoryRecord[] = [];
 
-      try {
-        const response = await fetch("/api/memories", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: memoryId }),
-        });
-        const data = (await response.json()) as
-          | { success: boolean }
-          | { error: string };
-
-        if (!response.ok || "error" in data) {
-          throw new Error("error" in data ? data.error : "Delete failed");
-        }
-
-        setMemories((current) => {
-          const next: PageMemoryRecord[] = [];
-
-          for (const page of current) {
-            if (page.id === memoryId) {
-              continue;
-            }
-
-            next.push({
-              ...page,
-              voiceNotes: page.voiceNotes.filter(
-                (note) => note.id !== memoryId,
-              ),
-              matchedVoiceNoteIds: page.matchedVoiceNoteIds?.filter(
-                (id) => id !== memoryId,
-              ),
-            });
+        for (const page of current) {
+          if (page.id === memoryId) {
+            continue;
           }
 
-          setSelectedMemoryId((currentId) => {
-            if (currentId !== memoryId) {
-              return currentId;
-            }
-
-            return next[0]?.id ?? null;
+          next.push({
+            ...page,
+            voiceNotes: page.voiceNotes.filter((note) => note.id !== memoryId),
+            matchedVoiceNoteIds: page.matchedVoiceNoteIds?.filter(
+              (id) => id !== memoryId,
+            ),
           });
+        }
 
-          return next;
+        setSelectedMemoryId((currentId) => {
+          if (currentId !== memoryId) {
+            return currentId;
+          }
+
+          return next[0]?.id ?? null;
         });
 
-        setHighlightedIds((current) => current.filter((id) => id !== memoryId));
-      } catch (error) {
-        console.error("Delete failed:", error);
-        window.alert("Unable to delete this memory right now.");
-      } finally {
-        setDeletingMemoryId(null);
+        return next;
+      });
+
+      setHighlightedIds((current) => current.filter((id) => id !== memoryId));
+    } catch (error) {
+      console.error("Delete failed:", error);
+    } finally {
+      setDeletingMemoryId(null);
+    }
+  }, []);
+
+  const handleDeleteMemory = useCallback((memoryId: string, label: string) => {
+    setConfirmDeleteState({
+      kind: "memory",
+      id: memoryId,
+      label,
+    });
+  }, []);
+
+  const deleteFolderById = useCallback(async (folderId: string) => {
+    setDeletingFolderId(folderId);
+
+    try {
+      const response = await fetch("/api/folders", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: folderId }),
+      });
+      const data = (await response.json()) as
+        | { success: boolean }
+        | { error: string };
+
+      if (!response.ok || "error" in data) {
+        throw new Error("error" in data ? data.error : "Delete failed");
       }
-    },
-    [],
-  );
+
+      setFolders((current) => current.filter((folder) => folder.id !== folderId));
+      setMemories((current) =>
+        current.map((memory) =>
+          memory.folder_id === folderId
+            ? {
+                ...memory,
+                folder_id: null,
+              }
+            : memory,
+        ),
+      );
+      setSelectedFolderId((current) => (current === folderId ? null : current));
+    } catch (error) {
+      console.error("Delete folder failed:", error);
+    } finally {
+      setDeletingFolderId(null);
+    }
+  }, []);
+
+  const handleDeleteFolder = useCallback((folderId: string, label: string) => {
+    setConfirmDeleteState({
+      kind: "folder",
+      id: folderId,
+      label,
+    });
+  }, []);
+
+  const closeDeleteDialog = useCallback(() => {
+    if (deletingMemoryId || deletingFolderId) {
+      return;
+    }
+
+    setConfirmDeleteState(null);
+  }, [deletingFolderId, deletingMemoryId]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!confirmDeleteState) {
+      return;
+    }
+
+    if (confirmDeleteState.kind === "memory") {
+      await deleteMemoryById(confirmDeleteState.id);
+    } else {
+      await deleteFolderById(confirmDeleteState.id);
+    }
+
+    setConfirmDeleteState(null);
+  }, [confirmDeleteState, deleteFolderById, deleteMemoryById]);
 
   const toggleVoiceNote = useCallback((noteId: string) => {
     setExpandedVoiceNoteIds((current) =>
@@ -1330,25 +1451,43 @@ export default function Dashboard() {
                         All memories
                       </SidebarFilterButton>
                       {folders.map((folder) => (
-                        <SidebarFilterButton
-                          key={folder.id}
-                          active={selectedFolderId === folder.id}
-                          onClick={() => {
-                            setSelectedFolderId(folder.id);
-                            setSelectedTag(null);
-                          }}
-                          onDrop={() => {
-                            if (draggedMemoryId) {
-                              void handleMoveToFolder(
-                                draggedMemoryId,
-                                folder.id,
-                              );
+                        <div key={folder.id} className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <SidebarFilterButton
+                              active={selectedFolderId === folder.id}
+                              onClick={() => {
+                                setSelectedFolderId(folder.id);
+                                setSelectedTag(null);
+                              }}
+                              onDrop={() => {
+                                if (draggedMemoryId) {
+                                  void handleMoveToFolder(
+                                    draggedMemoryId,
+                                    folder.id,
+                                  );
+                                }
+                              }}
+                              icon={<FolderIcon size={16} />}
+                            >
+                              {folder.name}
+                            </SidebarFilterButton>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteFolder(folder.id, folder.name)
                             }
-                          }}
-                          icon={<FolderIcon size={16} />}
-                        >
-                          {folder.name}
-                        </SidebarFilterButton>
+                            disabled={deletingFolderId === folder.id}
+                            aria-label={`Delete folder ${folder.name}`}
+                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-transparent text-(--muted) transition hover:border-(--line) hover:bg-(--surface) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deletingFolderId === folder.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={14} />
+                            )}
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </section>
@@ -1854,6 +1993,29 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+      <ConfirmDeleteDialog
+        open={Boolean(confirmDeleteState)}
+        title={
+          confirmDeleteState?.kind === "folder"
+            ? `Delete "${confirmDeleteState.label}"?`
+            : `Delete "${confirmDeleteState?.label}"?`
+        }
+        description={
+          confirmDeleteState?.kind === "folder"
+            ? "This removes the folder but keeps its memories. Items inside it will move back to All memories."
+            : "This memory will be removed from your workspace."
+        }
+        confirmLabel={
+          confirmDeleteState?.kind === "folder"
+            ? "Delete folder"
+            : "Delete memory"
+        }
+        isWorking={Boolean(deletingMemoryId || deletingFolderId)}
+        onCancel={closeDeleteDialog}
+        onConfirm={() => {
+          void confirmDelete();
+        }}
+      />
     </div>
   );
 }

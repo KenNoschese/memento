@@ -94,6 +94,13 @@ export async function DELETE(req: Request) {
       );
     }
 
+    const { error: unassignError } = await supabase
+      .from("memories")
+      .update({ folder_id: null })
+      .eq("folder_id", id);
+
+    if (unassignError) throw unassignError;
+
     const { error } = await supabase.from("folders").delete().eq("id", id);
 
     if (error) throw error;
