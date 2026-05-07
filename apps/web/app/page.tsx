@@ -590,27 +590,7 @@ function LandingView({
           </div>
         </section>
 
-        {chatMessages.length === 0 ? (
-          <div className="mt-10 flex flex-col items-center justify-center text-center">
-            <h2 className="text-2xl font-semibold text-foreground">
-              What&apos;s on your mind?
-            </h2>
-            <p className="mt-2 max-w-2xl text-(--muted)">
-              Ask anything about your browsing history or voice notes.
-            </p>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              {suggestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => onSendChat(suggestion)}
-                  className="rounded-full border border-(--line) bg-(--surface) px-4 py-2.5 text-sm text-(--muted-strong) transition hover:border-(--accent-edge) hover:bg-(--accent-soft) hover:text-(--accent)"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
+        {chatMessages.length > 0 ? (
           <div className="space-y-6">
             {chatMessages.map((msg, i) => (
               <div
@@ -710,37 +690,52 @@ function LandingView({
               </div>
             )}
           </div>
-        )}
+        ) : null}
         <div ref={chatEndRef} />
       </div>
 
       <div className="sticky bottom-0 mt-2 border-t border-(--line) bg-gradient-to-t from-(--background) via-(--background) to-transparent px-4 pb-8 pt-6 sm:px-8">
-        <form
-          onSubmit={handleSubmit}
-          className="mx-auto flex max-w-3xl items-center gap-3"
-        >
-          <div className="relative flex-1">
-            <input
-              type="text"
-              placeholder="Ask Memento..."
-              className="w-full rounded-2xl border border-(--line) bg-(--surface) py-4 pl-6 pr-14 text-base shadow-sm outline-none transition focus:border-(--accent) focus:ring-1 focus:ring-(--accent-soft)"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              disabled={isSendingChat}
-            />
-            <button
-              type="submit"
-              disabled={!inputValue.trim() || isSendingChat}
-              className="absolute right-3 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-xl bg-(--accent) text-white transition hover:bg-(--accent-strong) disabled:opacity-50"
-            >
-              {isSendingChat ? (
-                <Loader2 size={18} className="animate-spin" />
-              ) : (
-                <Sparkles size={18} />
-              )}
-            </button>
+        <div className="group/chat mx-auto max-w-3xl">
+          <form
+            onSubmit={handleSubmit}
+            className="flex items-center gap-3 transition duration-200 group-hover/chat:-translate-y-2 group-focus-within/chat:-translate-y-2"
+          >
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Ask Memento..."
+                className="w-full rounded-[1.6rem] border border-(--line) bg-(--surface) py-4 pl-6 pr-14 text-base shadow-[0_12px_34px_rgba(38,33,28,0.08)] outline-none transition focus:border-(--accent) focus:ring-1 focus:ring-(--accent-soft) group-hover/chat:border-(--accent-edge)"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                disabled={isSendingChat}
+              />
+              <button
+                type="submit"
+                disabled={!inputValue.trim() || isSendingChat}
+                className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl bg-(--accent) text-white transition hover:bg-(--accent-strong) disabled:opacity-50"
+              >
+                {isSendingChat ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <Sparkles size={18} />
+                )}
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-3 flex flex-wrap justify-center gap-2.5 transition duration-200 group-hover/chat:-translate-y-1 group-focus-within/chat:-translate-y-1">
+            {suggestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => onSendChat(suggestion)}
+                className="rounded-full border border-(--line) bg-(--surface)/92 px-4 py-2.5 text-sm text-(--muted-strong) shadow-sm backdrop-blur transition hover:border-(--accent-edge) hover:bg-(--accent-soft) hover:text-(--accent)"
+              >
+                {suggestion}
+              </button>
+            ))}
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
