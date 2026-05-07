@@ -4,6 +4,14 @@ import { Storage } from "@plasmohq/storage"
 
 import { getApiBaseUrl } from "../config"
 
+type OperationStatus = {
+  ok: boolean
+  at: number
+  error?: string
+}
+
+type PageStatus = "eligible" | "blocked" | "unsupported" | "paused"
+
 // Show INIT badge to confirm service worker is running
 chrome.runtime.onInstalled.addListener(() => {
   chrome.action.setBadgeText({ text: "LOAD" })
@@ -24,6 +32,7 @@ const BLOCKED_PROTOCOLS = [
 ]
 
 const BLOCKED_HOSTS = ["localhost"]
+const DEFAULT_DENYLIST = ["localhost", "127.0.0.1"]
 
 const isUrlBlocked = (rawUrl?: string) => {
   if (!rawUrl) return true
@@ -41,6 +50,177 @@ const isUrlBlocked = (rawUrl?: string) => {
 }
 
 const storage = new Storage()
+const POPUP_STATUS_STORAGE_KEY = "popupStatus"
+
+const getStoredPopupStatus = async () => {
+  const result = await chrome.storage.local.get([POPUP_STATUS_STORAGE_KEY])
+  return (result[POPUP_STATUS_STORAGE_KEY] ?? {}) as {
+    lastIndex?: OperationStatus
+    lastVoiceNote?: OperationStatus
+    hasMicPermission?: boolean | "unknown"
+  }
+}
+
+const setStoredPopupStatus = async (
+  patch: Partial<{
+    lastIndex: OperationStatus
+    lastVoiceNote: OperationStatus
+    hasMicPermission: boolean | "unknown"
+  }>
+) => {
+  const current = await getStoredPopupStatus()
+  await chrome.storage.local.set({
+    [POPUP_STATUS_STORAGE_KEY]: {
+      ...current,
+      ...patch
+    }
+  })
+}
+
+const getOrCreateUserId = async () => {
+  let userId = await storage.get<string>("memento_user_id")
+
+  if (!userId) {
+    userId = `user-${crypto.randomUUID().slice(0, 8)}`
+    await storage.set("memento_user_id", userId)
+  }
+
+  return userId
+}
+
+const getPageStatus = async (rawUrl?: string): Promise<{
+  pageStatus: PageStatus
+  pageStatusReason?: string
+}> => {
+  const settings = await chrome.storage.local.get([
+    "isIndexingEnabled",
+    "denylist"
+  ])
+  const isIndexingEnabled = settings.isIndexingEnabled !== false
+  const denylist = (settings.denylist as string[] | undefined) ?? DEFAULT_DENYLIST
+
+  if (!isIndexingEnabled) {
+    return {
+      pageStatus: "paused",
+      pageStatusReason: "Auto-indexing is paused"
+    }
+  }
+
+  if (!rawUrl) {
+    return {
+      pageStatus: "unsupported",
+      pageStatusReason: "No active page detected"
+    }
+  }
+
+  try {
+    const url = new URL(rawUrl)
+
+    if (BLOCKED_PROTOCOLS.includes(url.protocol) || rawUrl.startsWith("chrome://")) {
+      return {
+        pageStatus: "unsupported",
+        pageStatusReason: "This browser page cannot be indexed or recorded"
+      }
+    }
+
+    if (BLOCKED_HOSTS.includes(url.hostname)) {
+      return {
+        pageStatus: "blocked",
+        pageStatusReason: "Local development pages are excluded"
+      }
+    }
+
+    const matchingPattern = denylist.find(
+      (pattern) => url.hostname.includes(pattern) || rawUrl.includes(pattern)
+    )
+
+    if (matchingPattern) {
+      return {
+        pageStatus: "blocked",
+        pageStatusReason: `Blocked by denylist: ${matchingPattern}`
+      }
+    }
+  } catch (error) {
+    return {
+      pageStatus: "unsupported",
+      pageStatusReason: "This URL is not supported"
+    }
+  }
+
+  return {
+    pageStatus: "eligible",
+    pageStatusReason: "This page is ready for indexing and voice notes"
+  }
+}
+
+const getActiveBrowserTab = async () => {
+  const candidateQueries: chrome.tabs.QueryInfo[] = [
+    { active: true, lastFocusedWindow: true },
+    { active: true, currentWindow: true },
+    { active: true }
+  ]
+
+  for (const query of candidateQueries) {
+    const tabs = await chrome.tabs.query(query)
+    const tab = tabs.find((candidate) => {
+      if (!candidate.url) return false
+      return !candidate.url.startsWith("chrome-extension://")
+    })
+
+    if (tab) {
+      return tab
+    }
+  }
+
+  return null
+}
+
+const getActiveTabDetails = async () => {
+  const tab = await getActiveBrowserTab()
+
+  if (!tab?.url) {
+    return null
+  }
+
+  try {
+    const url = new URL(tab.url)
+    return {
+      url: tab.url,
+      title: tab.title ?? "Untitled page",
+      hostname: url.hostname
+    }
+  } catch (error) {
+    return {
+      url: tab.url,
+      title: tab.title ?? "Untitled page",
+      hostname: ""
+    }
+  }
+}
+
+const getPopupState = async () => {
+  const [popupStatus, activeTab, apiBaseUrl, userId, settings] = await Promise.all([
+    getStoredPopupStatus(),
+    getActiveTabDetails(),
+    getApiBaseUrl(),
+    getOrCreateUserId(),
+    chrome.storage.local.get(["isIndexingEnabled"])
+  ])
+  const pageState = await getPageStatus(activeTab?.url)
+
+  return {
+    isRecording,
+    isIndexingEnabled: settings.isIndexingEnabled !== false,
+    hasMicPermission: popupStatus.hasMicPermission ?? "unknown",
+    apiBaseUrl,
+    userId,
+    activeTab,
+    pageStatus: pageState.pageStatus,
+    pageStatusReason: pageState.pageStatusReason,
+    lastIndex: popupStatus.lastIndex,
+    lastVoiceNote: popupStatus.lastVoiceNote
+  }
+}
 
 // Unified Message Listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -53,23 +233,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.type === "recording-finished") {
     isRecording = false
     chrome.action.setBadgeText({ text: "" })
+    void setStoredPopupStatus({
+      lastVoiceNote: {
+        ok: true,
+        at: Date.now()
+      }
+    })
     void teardownOffscreen()
   } else if (message.type === "recording-failed") {
     console.error("Background: Recording failed reported:", message.error)
     isRecording = false
     chrome.action.setBadgeText({ text: "ERR" })
+    void setStoredPopupStatus({
+      lastVoiceNote: {
+        ok: false,
+        at: Date.now(),
+        error: message.error || "Recording failed"
+      }
+    })
     setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3000)
     void teardownOffscreen()
+  } else if (message.type === "microphone-permission-result") {
+    void setStoredPopupStatus({
+      hasMicPermission: message.granted ? true : false
+    })
+    sendResponse({ ok: true })
+  } else if (message.type === "get-popup-state") {
+    void (async () => {
+      try {
+        sendResponse(await getPopupState())
+      } catch (error) {
+        console.error("Background: Failed to build popup state:", error)
+        sendResponse({
+          isRecording,
+          isIndexingEnabled: true,
+          hasMicPermission: "unknown",
+          apiBaseUrl: await getApiBaseUrl(),
+          userId: await getOrCreateUserId(),
+          activeTab: null,
+          pageStatus: "unsupported",
+          pageStatusReason: "Unable to load popup state"
+        })
+      }
+    })()
+    return true
   } else if (message.type === "index-page") {
     void (async () => {
       try {
         const apiBaseUrl = await getApiBaseUrl()
-        let userId = await storage.get<string>("memento_user_id")
-
-        if (!userId) {
-          userId = `user-${crypto.randomUUID().slice(0, 8)}`
-          await storage.set("memento_user_id", userId)
-        }
+        const userId = await getOrCreateUserId()
 
         const response = await fetch(`${apiBaseUrl}/api/index`, {
           method: "POST",
@@ -84,12 +296,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           })
         })
 
+        await setStoredPopupStatus({
+          lastIndex: response.ok
+            ? {
+                ok: true,
+                at: Date.now()
+              }
+            : {
+                ok: false,
+                at: Date.now(),
+                error: `Server returned ${response.status}`
+              }
+        })
+
         sendResponse({
           ok: response.ok,
           status: response.status
         })
       } catch (error) {
         console.error("Background: Page indexing failed:", error)
+        await setStoredPopupStatus({
+          lastIndex: {
+            ok: false,
+            at: Date.now(),
+            error: error instanceof Error ? error.message : "Unknown error"
+          }
+        })
         sendResponse({
           ok: false,
           error: error instanceof Error ? error.message : "Unknown error"
@@ -122,8 +354,7 @@ async function startRecording() {
   isRecording = true
 
   try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
-    const tab = tabs[0]
+    const tab = await getActiveBrowserTab()
     
     if (!tab?.url || tab.url.startsWith("chrome://")) {
       console.warn("Cannot record on this page:", tab?.url)
@@ -184,6 +415,13 @@ async function startRecording() {
   } catch (error) {
     isRecording = false
     console.error("Start recording logic error:", error)
+    await setStoredPopupStatus({
+      lastVoiceNote: {
+        ok: false,
+        at: Date.now(),
+        error: error instanceof Error ? error.message : "Unable to start recording"
+      }
+    })
     chrome.action.setBadgeText({ text: "ERR!" })
     setTimeout(() => chrome.action.setBadgeText({ text: "" }), 2000)
   }

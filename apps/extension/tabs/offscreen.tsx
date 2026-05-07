@@ -70,6 +70,11 @@ export default function OffscreenPage() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      chrome.runtime.sendMessage({
+        type: "microphone-permission-result",
+        granted: true,
+        target: "background"
+      })
       streamRef.current = stream
 
       stream.getTracks().forEach((track) => {
@@ -124,6 +129,11 @@ export default function OffscreenPage() {
       mediaRecorder.start(1000)
     } catch (error) {
       isCurrentlyRecording.current = false
+      chrome.runtime.sendMessage({
+        type: "microphone-permission-result",
+        granted: false,
+        target: "background"
+      })
       chrome.runtime.sendMessage({
         type: "recording-failed",
         error: (error as Error).message,
