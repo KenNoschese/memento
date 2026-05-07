@@ -1,6 +1,5 @@
-import { useEffect, useState, type CSSProperties } from "react"
-
 import logo from "data-base64:~assets/logo-light.png"
+import { useEffect, useState, type CSSProperties } from "react"
 
 type OperationStatus = {
   ok: boolean
@@ -130,11 +129,16 @@ const getPrimaryAction = (state: PopupState | null) => {
 const getActivityText = (state: PopupState | null) => {
   if (!state) return "Loading capture status…"
   if (state.isRecording) return "Recording a voice note for this page."
-  if (state.lastVoiceNote?.error) return `Voice note failed: ${state.lastVoiceNote.error}`
-  if (state.lastIndex?.error) return `Page index failed: ${state.lastIndex.error}`
-  if (state.lastVoiceNote?.ok) return `Last voice note uploaded ${getRelativeTime(state.lastVoiceNote.at)}.`
-  if (state.lastIndex?.ok) return `Page indexed ${getRelativeTime(state.lastIndex.at)}.`
-  if (state.pageStatus === "eligible") return "This page will be indexed after a short delay."
+  if (state.lastVoiceNote?.error)
+    return `Voice note failed: ${state.lastVoiceNote.error}`
+  if (state.lastIndex?.error)
+    return `Page index failed: ${state.lastIndex.error}`
+  if (state.lastVoiceNote?.ok)
+    return `Last voice note uploaded ${getRelativeTime(state.lastVoiceNote.at)}.`
+  if (state.lastIndex?.ok)
+    return `Page indexed ${getRelativeTime(state.lastIndex.at)}.`
+  if (state.pageStatus === "eligible")
+    return "This page will be indexed after a short delay."
   return state.pageStatusReason ?? "Open a supported page to capture it."
 }
 
@@ -321,7 +325,13 @@ function IndexPopup() {
 
   return (
     <div style={rootStyle}>
-      <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div
+        style={{
+          ...cardStyle,
+          display: "flex",
+          flexDirection: "column",
+          gap: 14
+        }}>
         <div
           style={{
             display: "flex",
@@ -364,7 +374,9 @@ function IndexPopup() {
               letterSpacing: "0.14em",
               textTransform: "uppercase"
             }}>
-            {popupState?.isRecording ? "Recording" : pageLabelByStatus[pageStatus]}
+            {popupState?.isRecording
+              ? "Recording"
+              : pageLabelByStatus[pageStatus]}
           </div>
         </div>
 
@@ -409,9 +421,10 @@ function IndexPopup() {
           style={{
             borderRadius: 16,
             padding: "12px 14px",
-            background: errorMessage || popupState?.hasMicPermission === false
-              ? "#fbefec"
-              : palette.surfaceSoft,
+            background:
+              errorMessage || popupState?.hasMicPermission === false
+                ? "#fbefec"
+                : palette.surfaceSoft,
             border: `1px solid ${
               errorMessage || popupState?.hasMicPermission === false
                 ? "#ebc3ba"
@@ -430,7 +443,8 @@ function IndexPopup() {
               : getActivityText(popupState))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <button
             onClick={openDashboard}
             disabled={!popupState}
@@ -450,7 +464,9 @@ function IndexPopup() {
               color: palette.foreground,
               border: `1px solid ${palette.line}`
             }}>
-            {popupState?.isIndexingEnabled ? "Pause Indexing" : "Resume Indexing"}
+            {popupState?.isIndexingEnabled
+              ? "Pause Indexing"
+              : "Resume Indexing"}
           </button>
         </div>
 
@@ -476,16 +492,6 @@ function IndexPopup() {
               color: palette.mutedStrong,
               border: `1px solid ${palette.line}`,
               fontWeight: 600
-            }}>
-            Settings
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default IndexPopup
             }}>
             Settings
           </button>
