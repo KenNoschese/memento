@@ -172,7 +172,7 @@ const extractAndSend = async (targetUrl: string) => {
     ]
 
     if (!isEnabled) {
-      console.log("Memento: Indexing is disabled. Skipping.")
+      console.debug("Memento: Indexing is disabled. Skipping.")
       return false
     }
 
@@ -184,13 +184,13 @@ const extractAndSend = async (targetUrl: string) => {
     )
 
     if (isBlocked) {
-      console.log(
+      console.debug(
         `Memento: URL "${currentUrl}" matches denylist pattern. Skipping.`
       )
       return false
     }
 
-    console.log("Memento: Starting extraction...")
+    console.debug("Memento: Starting extraction...")
 
     // 1. Extract the "meat" of the page
     const docClone = document.cloneNode(true) as Document
@@ -198,7 +198,7 @@ const extractAndSend = async (targetUrl: string) => {
     const article = reader.parse()
 
     if (article && article.textContent) {
-      console.log("Memento: Content extracted. Title:", article.title)
+      console.debug("Memento: Content extracted. Title:", article.title)
 
       // 2. Send to API (Communication to Next.js backend)
       let userId = await storage.get<string>("memento_user_id")
@@ -207,7 +207,7 @@ const extractAndSend = async (targetUrl: string) => {
       if (!userId) {
         userId = `user-${crypto.randomUUID().slice(0, 8)}`
         await storage.set("memento_user_id", userId)
-        console.log("Memento: Generated new stable userId:", userId)
+        console.debug("Memento: Generated new stable userId:", userId)
       }
 
       const response = await chrome.runtime.sendMessage({
@@ -221,7 +221,7 @@ const extractAndSend = async (targetUrl: string) => {
       })
 
       if (response?.ok) {
-        console.log("Memento: Successfully indexed page.")
+        console.debug("Memento: Successfully indexed page.")
         return true
       } else {
         console.error(
@@ -231,7 +231,7 @@ const extractAndSend = async (targetUrl: string) => {
         return false
       }
     } else {
-      console.warn(
+      console.debug(
         "Memento: Readability could not find any content on this page."
       )
       return false
@@ -244,7 +244,7 @@ const extractAndSend = async (targetUrl: string) => {
 
 // The 5 second rule
 const scheduleInitialIndex = () => {
-  console.log("Memento: Content script loaded. Timer started (5s)...")
+  console.debug("Memento: Content script loaded. Timer started (5s)...")
   scheduleIndex(window.location.href, 5000)
 }
 
