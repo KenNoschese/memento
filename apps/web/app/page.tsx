@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import * as Select from "@radix-ui/react-select";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -152,15 +153,19 @@ function Logo({ size, className }: { size?: number; className?: string }) {
   const style = size ? { width: size, height: size } : undefined;
   return (
     <div className={`relative flex items-center justify-center ${className || ""}`} style={style}>
-      <img
+      <Image
         src="/logo-light.png"
         alt="Memento"
-        className="h-full w-full object-contain block [.dark_&]:hidden"
+        fill
+        className="object-contain block [.dark_&]:hidden"
+        priority
       />
-      <img
+      <Image
         src="/logo-dark.png"
         alt="Memento"
-        className="h-full w-full object-contain hidden [.dark_&]:block"
+        fill
+        className="object-contain hidden [.dark_&]:block"
+        priority
       />
     </div>
   );
