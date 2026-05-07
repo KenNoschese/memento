@@ -10,7 +10,7 @@ function OptionsIndex() {
         setDenylist(result.denylist.join("\n"))
       } else {
         // Default denylist
-        const defaults = ["localhost", "127.0.0.1"]
+        const defaults = ["memento-mjk1.vercel.app", "127.0.0.1"]
         setDenylist(defaults.join("\n"))
         chrome.storage.local.set({ denylist: defaults })
       }
@@ -55,7 +55,7 @@ function OptionsIndex() {
           Site Denylist
         </label>
         <p style={{ fontSize: "12px", color: "#888", marginBottom: "8px" }}>
-          Enter one domain or keyword per line (e.g., "localhost", "github.com", "internal.site").
+          Enter one domain or keyword per line (e.g., "memento-mjk1.vercel.app", "github.com", "internal.site").
         </p>
         <textarea
           value={denylist}
@@ -70,7 +70,7 @@ function OptionsIndex() {
             fontSize: "13px",
             boxSizing: "border-box"
           }}
-          placeholder="localhost"
+          placeholder="memento-mjk1.vercel.app"
         />
       </div>
 

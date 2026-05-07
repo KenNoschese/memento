@@ -107,7 +107,7 @@ Do not move secrets or direct model calls into the extension.
 
 ### Practical Development Notes
 - The extension currently expects the web app API to be reachable while developing.
-- The extension currently talks to `http://localhost:3000` directly in runtime code. Treat that as a current limitation, not a desired final design.
+- The extension currently talks to `https://memento-mjk1.vercel.app` directly in runtime code. Treat that as a current deployment assumption, not a desired final design.
 - If you change commands, build assumptions, or toolchain versions, update this file.
 
 ---
@@ -247,7 +247,7 @@ Current recommended build order:
 
 1. Sessions/folders
 2. Relation-based organization and richer grouping
-3. Reduce localhost coupling
+3. Reduce deployed-domain coupling
 
 Reasoning:
 - data relationships come second

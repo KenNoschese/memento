@@ -1,6 +1,8 @@
 import { Readability } from "@mozilla/readability"
 import { Storage } from "@plasmohq/storage"
 
+const DASHBOARD_HOSTNAME = "memento-mjk1.vercel.app"
+
 const storage = new Storage()
 
 // SPA debounce (ms). Can be overridden by chrome.storage.local.spaDebounceMs
@@ -109,7 +111,7 @@ const handleVisibilityOrUnload = () => {
 const setupAdditionalIndexing = () => {
   try {
     // Sync userId if we are on the dashboard domain
-    if (window.location.hostname === "localhost" && window.location.port === "3000") {
+    if (window.location.hostname === DASHBOARD_HOSTNAME) {
       const dashboardUserId = window.localStorage.getItem("memento_user_id")
       if (dashboardUserId) {
         storage.set("memento_user_id", dashboardUserId).then(() => {
@@ -167,7 +169,7 @@ const extractAndSend = async (targetUrl: string) => {
     ])
     const isEnabled = settings.isIndexingEnabled !== false // default to true
     const denylist = (settings.denylist as string[]) || [
-      "localhost",
+      DASHBOARD_HOSTNAME,
       "127.0.0.1"
     ]
 

@@ -58,14 +58,15 @@ const palette = {
 const storage = new Storage()
 const POPUP_STATUS_STORAGE_KEY = "popupStatus"
 const RECORDING_SESSION_STORAGE_KEY = "recordingSession"
-const DEFAULT_DENYLIST = ["localhost", "127.0.0.1"]
+const DASHBOARD_HOSTNAME = "memento-mjk1.vercel.app"
+const DEFAULT_DENYLIST = [DASHBOARD_HOSTNAME, "127.0.0.1"]
 const BLOCKED_PROTOCOLS = [
   "chrome-extension:",
   "file:",
   "about:",
   "data:"
 ]
-const BLOCKED_HOSTS = ["localhost"]
+const BLOCKED_HOSTS = [DASHBOARD_HOSTNAME]
 
 const isUrlBlocked = (rawUrl?: string) => {
   if (!rawUrl) return true

@@ -41,8 +41,9 @@ const BLOCKED_PROTOCOLS = [
   "data:"
 ]
 
-const BLOCKED_HOSTS = ["localhost"]
-const DEFAULT_DENYLIST = ["localhost", "127.0.0.1"]
+const DASHBOARD_HOSTNAME = "memento-mjk1.vercel.app"
+const BLOCKED_HOSTS = [DASHBOARD_HOSTNAME]
+const DEFAULT_DENYLIST = [DASHBOARD_HOSTNAME, "127.0.0.1"]
 
 const isUrlBlocked = (rawUrl?: string) => {
   if (!rawUrl) return true
@@ -487,7 +488,7 @@ async function startRecording() {
       return
     }
 
-    // Additional blocked URL checks (chrome-extension://, file://, about:, data:, localhost)
+    // Additional blocked URL checks (chrome-extension://, file://, about:, data:, deployed dashboard)
     if (isUrlBlocked(resolvedTabContext.url)) {
       console.warn("Cannot record on blocked/unsupported URL:", resolvedTabContext.url)
       isRecording = false

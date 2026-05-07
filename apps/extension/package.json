@@ -27,7 +27,7 @@
   },
   "manifest": {
     "host_permissions": [
-      "https://*/*", "http://localhost:3000/*"
+      "https://*/*", "https://memento-mjk1.vercel.app/*"
     ],
     "commands": {
       "start-voice-record": {
