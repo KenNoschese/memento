@@ -65,6 +65,25 @@ function getSourceLabel(url: string) {
   }
 }
 
+function getSelectedBrowseLabel(
+  folders: Folder[],
+  selectedFolderId: string | null,
+  selectedTag: string | null,
+) {
+  if (selectedTag) {
+    return `Tag: ${selectedTag}`;
+  }
+
+  if (!selectedFolderId) {
+    return "All memories";
+  }
+
+  return (
+    folders.find((folder) => folder.id === selectedFolderId)?.name ||
+    "Selected folder"
+  );
+}
+
 function ThemeToggle() {
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== "undefined") {
@@ -805,6 +824,11 @@ export default function Dashboard() {
     return Array.from(tags).sort();
   }, [sortedMemories]);
 
+  const selectedBrowseLabel = useMemo(
+    () => getSelectedBrowseLabel(folders, selectedFolderId, selectedTag),
+    [folders, selectedFolderId, selectedTag],
+  );
+
   const selectedMemory = useMemo(
     () => memories.find((memory) => memory.id === selectedMemoryId) ?? null,
     [memories, selectedMemoryId],
@@ -1524,7 +1548,118 @@ export default function Dashboard() {
                           ))}
                         </div>
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="group/browse relative mt-3 pb-2">
+                        <div className="flex cursor-default items-center justify-between gap-3 rounded-xl border border-(--line) bg-(--surface) px-3 py-2.5 text-sm text-(--muted) transition group-hover/browse:border-(--accent-edge) group-hover/browse:text-foreground">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--surface-soft) text-(--muted-strong)">
+                              <FolderIcon size={16} />
+                            </span>
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-(--muted)">
+                                Browse
+                              </div>
+                              <div className="truncate text-sm text-foreground/85">
+                                {selectedBrowseLabel}
+                              </div>
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded-full border border-(--line) bg-(--surface-soft) px-2 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-(--muted)">
+                            {folders.length + 1}
+                          </span>
+                        </div>
+
+                        <div className="pointer-events-none absolute left-0 right-0 top-[calc(100%-0.35rem)] z-30 origin-top scale-[0.98] rounded-[1.1rem] border border-(--line) bg-(--surface) p-3 opacity-0 shadow-xl transition duration-150 group-hover/browse:pointer-events-auto group-hover/browse:scale-100 group-hover/browse:opacity-100 group-focus-within/browse:pointer-events-auto group-focus-within/browse:scale-100 group-focus-within/browse:opacity-100">
+                          {isCreatingFolder ? (
+                            <form onSubmit={handleCreateFolder} className="mb-3 px-1">
+                              <input
+                                autoFocus
+                                type="text"
+                                placeholder="New folder name"
+                                value={newFolderName}
+                                onChange={(event) =>
+                                  setNewFolderName(event.target.value)
+                                }
+                                className="w-full rounded-xl border border-(--line) bg-(--surface) px-4 py-3 text-sm outline-none focus:border-(--accent)"
+                                onBlur={() => {
+                                  if (!newFolderName.trim())
+                                    setIsCreatingFolder(false);
+                                }}
+                              />
+                            </form>
+                          ) : null}
+
+                          <SidebarFilterButton
+                            active={!selectedFolderId && !selectedTag}
+                            onClick={() => {
+                              setSelectedFolderId(null);
+                              setSelectedTag(null);
+                            }}
+                            onDrop={() => {
+                              if (draggedMemoryId) {
+                                void handleMoveToFolder(draggedMemoryId, null);
+                              }
+                            }}
+                            icon={<FolderIcon size={16} />}
+                          >
+                            All memories
+                          </SidebarFilterButton>
+
+                          <div
+                            className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--line) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted)"
+                            style={{
+                              scrollbarColor: "var(--line) transparent",
+                            }}
+                          >
+                            {folders.map((folder) => (
+                              <div
+                                key={folder.id}
+                                className="flex items-center gap-2"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <SidebarFilterButton
+                                    active={selectedFolderId === folder.id}
+                                    onClick={() => {
+                                      setSelectedFolderId(folder.id);
+                                      setSelectedTag(null);
+                                    }}
+                                    onDrop={() => {
+                                      if (draggedMemoryId) {
+                                        void handleMoveToFolder(
+                                          draggedMemoryId,
+                                          folder.id,
+                                        );
+                                      }
+                                    }}
+                                    icon={<FolderIcon size={16} />}
+                                  >
+                                    {folder.name}
+                                  </SidebarFilterButton>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeleteFolder(folder.id, folder.name)
+                                  }
+                                  disabled={deletingFolderId === folder.id}
+                                  aria-label={`Delete folder ${folder.name}`}
+                                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-transparent text-(--muted) transition hover:border-(--line) hover:bg-(--surface-soft) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {deletingFolderId === folder.id ? (
+                                    <Loader2
+                                      size={14}
+                                      className="animate-spin"
+                                    />
+                                  ) : (
+                                    <Trash2 size={14} />
+                                  )}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </section>
 
                   <section>
