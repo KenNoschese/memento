@@ -57,6 +57,11 @@ function getMemorySummary(memory: PageMemoryRecord) {
   return memory.summary?.trim() || memory.content?.trim() || memory.url;
 }
 
+function getMemoryPreview(memory: PageMemoryRecord) {
+  const normalizedContent = normalizeExtractedText(memory.content);
+  return normalizedContent || memory.summary?.trim() || memory.url;
+}
+
 function getSourceLabel(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -339,7 +344,7 @@ function MemoryListItem({
             {getMemoryTitle(memory)}
           </div>
           <div className="mt-1 line-clamp-2 text-sm leading-6 text-(--muted)">
-            {signal?.resumeReason || getMemorySummary(memory)}
+            {getMemoryPreview(memory)}
           </div>
         </div>
         <button
@@ -1449,114 +1454,111 @@ export default function Dashboard() {
                     </div>
 
                     <div className="group/browse relative mt-3 pb-2">
-                        <div className="flex cursor-default items-center justify-between gap-3 rounded-xl border border-(--line) bg-(--surface) px-3 py-2.5 text-sm text-(--muted) transition group-hover/browse:border-(--accent-edge) group-hover/browse:text-foreground">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--surface-soft) text-(--muted-strong)">
-                              <FolderIcon size={16} />
-                            </span>
-                            <div className="min-w-0">
-                              <div className="truncate text-sm text-foreground/85">
-                                {selectedBrowseLabel}
-                              </div>
+                      <div className="flex cursor-default items-center justify-between gap-3 rounded-xl border border-(--line) bg-(--surface) px-3 py-2.5 text-sm text-(--muted) transition group-hover/browse:border-(--accent-edge) group-hover/browse:text-foreground">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--surface-soft) text-(--muted-strong)">
+                            <FolderIcon size={16} />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm text-foreground/85">
+                              {selectedBrowseLabel}
                             </div>
                           </div>
-                          <span className="shrink-0 rounded-full border border-(--line) bg-(--surface-soft) px-2 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-(--muted)">
-                            {folders.length + 1}
-                          </span>
                         </div>
+                        <span className="shrink-0 rounded-full border border-(--line) bg-(--surface-soft) px-2 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-(--muted)">
+                          {folders.length + 1}
+                        </span>
+                      </div>
 
-                        <div className="pointer-events-none absolute left-0 right-0 top-[calc(100%-0.35rem)] z-30 origin-top scale-[0.98] rounded-[1.1rem] border border-(--line) bg-(--surface) p-3 opacity-0 shadow-xl transition duration-150 group-hover/browse:pointer-events-auto group-hover/browse:scale-100 group-hover/browse:opacity-100 group-focus-within/browse:pointer-events-auto group-focus-within/browse:scale-100 group-focus-within/browse:opacity-100">
-                          {isCreatingFolder ? (
-                            <form
-                              onSubmit={handleCreateFolder}
-                              className="mb-3 px-1"
-                            >
-                              <input
-                                autoFocus
-                                type="text"
-                                placeholder="New folder name"
-                                value={newFolderName}
-                                onChange={(event) =>
-                                  setNewFolderName(event.target.value)
-                                }
-                                className="w-full rounded-xl border border-(--line) bg-(--surface) px-4 py-3 text-sm outline-none focus:border-(--accent)"
-                                onBlur={() => {
-                                  if (!newFolderName.trim())
-                                    setIsCreatingFolder(false);
-                                }}
-                              />
-                            </form>
-                          ) : null}
-
-                          <SidebarFilterButton
-                            active={!selectedFolderId && !selectedTag}
-                            onClick={() => {
-                              setSelectedFolderId(null);
-                              setSelectedTag(null);
-                            }}
-                            onDrop={() => {
-                              if (draggedMemoryId) {
-                                void handleMoveToFolder(draggedMemoryId, null);
+                      <div className="pointer-events-none absolute left-0 right-0 top-[calc(100%-0.35rem)] z-30 origin-top scale-[0.98] rounded-[1.1rem] border border-(--line) bg-(--surface) p-3 opacity-0 shadow-xl transition duration-150 group-hover/browse:pointer-events-auto group-hover/browse:scale-100 group-hover/browse:opacity-100 group-focus-within/browse:pointer-events-auto group-focus-within/browse:scale-100 group-focus-within/browse:opacity-100">
+                        {isCreatingFolder ? (
+                          <form
+                            onSubmit={handleCreateFolder}
+                            className="mb-3 px-1"
+                          >
+                            <input
+                              autoFocus
+                              type="text"
+                              placeholder="New folder name"
+                              value={newFolderName}
+                              onChange={(event) =>
+                                setNewFolderName(event.target.value)
                               }
-                            }}
-                            icon={<FolderIcon size={16} />}
-                          >
-                            All memories
-                          </SidebarFilterButton>
+                              className="w-full rounded-xl border border-(--line) bg-(--surface) px-4 py-3 text-sm outline-none focus:border-(--accent)"
+                              onBlur={() => {
+                                if (!newFolderName.trim())
+                                  setIsCreatingFolder(false);
+                              }}
+                            />
+                          </form>
+                        ) : null}
 
-                          <div
-                            className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--line) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted)"
-                            style={{
-                              scrollbarColor: "var(--line) transparent",
-                            }}
-                          >
-                            {folders.map((folder) => (
-                              <div
-                                key={folder.id}
-                                className="flex items-center gap-2"
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <SidebarFilterButton
-                                    active={selectedFolderId === folder.id}
-                                    onClick={() => {
-                                      setSelectedFolderId(folder.id);
-                                      setSelectedTag(null);
-                                    }}
-                                    onDrop={() => {
-                                      if (draggedMemoryId) {
-                                        void handleMoveToFolder(
-                                          draggedMemoryId,
-                                          folder.id,
-                                        );
-                                      }
-                                    }}
-                                    icon={<FolderIcon size={16} />}
-                                  >
-                                    {folder.name}
-                                  </SidebarFilterButton>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleDeleteFolder(folder.id, folder.name)
-                                  }
-                                  disabled={deletingFolderId === folder.id}
-                                  aria-label={`Delete folder ${folder.name}`}
-                                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-transparent text-(--muted) transition hover:border-(--line) hover:bg-(--surface-soft) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        <SidebarFilterButton
+                          active={!selectedFolderId && !selectedTag}
+                          onClick={() => {
+                            setSelectedFolderId(null);
+                            setSelectedTag(null);
+                          }}
+                          onDrop={() => {
+                            if (draggedMemoryId) {
+                              void handleMoveToFolder(draggedMemoryId, null);
+                            }
+                          }}
+                          icon={<FolderIcon size={16} />}
+                        >
+                          All memories
+                        </SidebarFilterButton>
+
+                        <div
+                          className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--line) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted)"
+                          style={{
+                            scrollbarColor: "var(--line) transparent",
+                          }}
+                        >
+                          {folders.map((folder) => (
+                            <div
+                              key={folder.id}
+                              className="flex items-center gap-2"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <SidebarFilterButton
+                                  active={selectedFolderId === folder.id}
+                                  onClick={() => {
+                                    setSelectedFolderId(folder.id);
+                                    setSelectedTag(null);
+                                  }}
+                                  onDrop={() => {
+                                    if (draggedMemoryId) {
+                                      void handleMoveToFolder(
+                                        draggedMemoryId,
+                                        folder.id,
+                                      );
+                                    }
+                                  }}
+                                  icon={<FolderIcon size={16} />}
                                 >
-                                  {deletingFolderId === folder.id ? (
-                                    <Loader2
-                                      size={14}
-                                      className="animate-spin"
-                                    />
-                                  ) : (
-                                    <Trash2 size={14} />
-                                  )}
-                                </button>
+                                  {folder.name}
+                                </SidebarFilterButton>
                               </div>
-                            ))}
-                          </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteFolder(folder.id, folder.name)
+                                }
+                                disabled={deletingFolderId === folder.id}
+                                aria-label={`Delete folder ${folder.name}`}
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-transparent text-(--muted) transition hover:border-(--line) hover:bg-(--surface-soft) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {deletingFolderId === folder.id ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={14} />
+                                )}
+                              </button>
+                            </div>
+                          ))}
                         </div>
+                      </div>
                     </div>
                   </section>
 
@@ -1585,32 +1587,32 @@ export default function Dashboard() {
                           style={{ scrollbarColor: "var(--line) transparent" }}
                         >
                           <div className="flex flex-wrap gap-2">
-                          {allTags.length > 0 ? (
-                            allTags.map((tag) => (
-                              <button
-                                type="button"
-                                key={tag}
-                                onClick={() => {
-                                  setSelectedTag(
-                                    selectedTag === tag ? null : tag,
-                                  );
-                                  setSelectedFolderId(null);
-                                }}
-                                className={`rounded-full border px-3 py-1.5 text-xs transition ${
-                                  selectedTag === tag
-                                    ? "border-(--accent-edge) bg-(--accent-soft) text-(--accent)"
-                                    : "border-(--line) bg-(--surface) text-(--muted) hover:border-(--accent-edge) hover:text-foreground"
-                                }`}
-                              >
-                                {tag}
-                              </button>
-                            ))
-                          ) : (
-                            <span className="px-1 text-sm text-(--muted)">
-                              No tags generated yet.
-                            </span>
-                          )}
-                        </div>
+                            {allTags.length > 0 ? (
+                              allTags.map((tag) => (
+                                <button
+                                  type="button"
+                                  key={tag}
+                                  onClick={() => {
+                                    setSelectedTag(
+                                      selectedTag === tag ? null : tag,
+                                    );
+                                    setSelectedFolderId(null);
+                                  }}
+                                  className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                                    selectedTag === tag
+                                      ? "border-(--accent-edge) bg-(--accent-soft) text-(--accent)"
+                                      : "border-(--line) bg-(--surface) text-(--muted) hover:border-(--accent-edge) hover:text-foreground"
+                                  }`}
+                                >
+                                  {tag}
+                                </button>
+                              ))
+                            ) : (
+                              <span className="px-1 text-sm text-(--muted)">
+                                No tags generated yet.
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ) : null}
