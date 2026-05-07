@@ -17,6 +17,7 @@ Memento is a browser extension and web dashboard that turns your browsing activi
 - **Embeddings:** Gemini (`gemini-embedding-001`) for 3072-dimensional vector representation
 - **Transcription:** Groq Whisper (`whisper-large-v3-turbo`) for high-speed voice-to-text
 - **Analysis & Briefing:** Groq Llama 3.1 (`8b-instant`) for transcript insights and memory summarization
+- **Natural Language Chat:** Gemini (`2.5 flash`) for fast and detailed responses
 - **Search:** Semantic vector search powered by `pgvector` on Supabase
 
 ### Data & Infrastructure
