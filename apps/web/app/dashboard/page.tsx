@@ -34,20 +34,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    console.log("Dashboard userId:", userId);
-  }, [userId]);
-
-  useEffect(() => {
-    if (!userId) {
-      setMemories([]);
-      setError(null);
-      setIsLoading(false);
-      return;
-    }
-
-    if (!supabase) {
-      setError("Supabase client is not configured.");
-      setIsLoading(false);
+    if (!userId || !supabase) {
       return;
     }
 
