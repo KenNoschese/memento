@@ -789,7 +789,6 @@ export default function Dashboard() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [isBrowseExpanded, setIsBrowseExpanded] = useState(true);
   const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [chatMessages, setChatMessages] = useState<
@@ -1429,32 +1428,17 @@ export default function Dashboard() {
                 <div className="mt-6 flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
                   <section className="rounded-[1.25rem] border border-(--line) bg-(--surface)/55 px-3 py-3">
                     <div className="flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setIsBrowseExpanded((current) => !current)
-                        }
-                        className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <SectionLabel icon={<FolderIcon size={13} />}>
-                            Browse
-                          </SectionLabel>
-                          <span className="rounded-full border border-(--line) bg-(--surface) px-2 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-(--muted)">
-                            {folders.length + 1}
-                          </span>
-                        </div>
-                        <ChevronDown
-                          size={15}
-                          className={`text-(--muted) transition ${
-                            isBrowseExpanded ? "rotate-180" : ""
-                          }`}
-                        />
-                      </button>
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <SectionLabel icon={<FolderIcon size={13} />}>
+                          Browse
+                        </SectionLabel>
+                        <span className="rounded-full border border-(--line) bg-(--surface) px-2 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-(--muted)">
+                          {folders.length + 1}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
-                          setIsBrowseExpanded(true);
                           setIsCreatingFolder(!isCreatingFolder);
                         }}
                         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-(--muted) transition hover:bg-(--surface) hover:text-foreground"
@@ -1464,93 +1448,7 @@ export default function Dashboard() {
                       </button>
                     </div>
 
-                    {isBrowseExpanded ? (
-                      <div className="mt-3 space-y-3">
-                        {isCreatingFolder ? (
-                          <form onSubmit={handleCreateFolder} className="px-1">
-                            <input
-                              autoFocus
-                              type="text"
-                              placeholder="New folder name"
-                              value={newFolderName}
-                              onChange={(event) =>
-                                setNewFolderName(event.target.value)
-                              }
-                              className="w-full rounded-xl border border-(--line) bg-(--surface) px-4 py-3 text-sm outline-none focus:border-(--accent)"
-                              onBlur={() => {
-                                if (!newFolderName.trim())
-                                  setIsCreatingFolder(false);
-                              }}
-                            />
-                          </form>
-                        ) : null}
-
-                        <SidebarFilterButton
-                          active={!selectedFolderId && !selectedTag}
-                          onClick={() => {
-                            setSelectedFolderId(null);
-                            setSelectedTag(null);
-                          }}
-                          onDrop={() => {
-                            if (draggedMemoryId) {
-                              void handleMoveToFolder(draggedMemoryId, null);
-                            }
-                          }}
-                          icon={<FolderIcon size={16} />}
-                        >
-                          All memories
-                        </SidebarFilterButton>
-
-                        <div
-                          className="max-h-56 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--line) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted)"
-                          style={{ scrollbarColor: "var(--line) transparent" }}
-                        >
-                          {folders.map((folder) => (
-                            <div
-                              key={folder.id}
-                              className="flex items-center gap-2"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <SidebarFilterButton
-                                  active={selectedFolderId === folder.id}
-                                  onClick={() => {
-                                    setSelectedFolderId(folder.id);
-                                    setSelectedTag(null);
-                                  }}
-                                  onDrop={() => {
-                                    if (draggedMemoryId) {
-                                      void handleMoveToFolder(
-                                        draggedMemoryId,
-                                        folder.id,
-                                      );
-                                    }
-                                  }}
-                                  icon={<FolderIcon size={16} />}
-                                >
-                                  {folder.name}
-                                </SidebarFilterButton>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleDeleteFolder(folder.id, folder.name)
-                                }
-                                disabled={deletingFolderId === folder.id}
-                                aria-label={`Delete folder ${folder.name}`}
-                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-transparent text-(--muted) transition hover:border-(--line) hover:bg-(--surface) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {deletingFolderId === folder.id ? (
-                                  <Loader2 size={14} className="animate-spin" />
-                                ) : (
-                                  <Trash2 size={14} />
-                                )}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="group/browse relative mt-3 pb-2">
+                    <div className="group/browse relative mt-3 pb-2">
                         <div className="flex cursor-default items-center justify-between gap-3 rounded-xl border border-(--line) bg-(--surface) px-3 py-2.5 text-sm text-(--muted) transition group-hover/browse:border-(--accent-edge) group-hover/browse:text-foreground">
                           <div className="flex min-w-0 items-center gap-3">
                             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--surface-soft) text-(--muted-strong)">
@@ -1659,8 +1557,7 @@ export default function Dashboard() {
                             ))}
                           </div>
                         </div>
-                      </div>
-                    )}
+                    </div>
                   </section>
 
                   <section>
