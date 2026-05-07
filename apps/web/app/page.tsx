@@ -446,7 +446,7 @@ function LandingView({
                       <button
                         type="button"
                         onClick={() => onSelectMemory(threads[0].latestMemoryId)}
-                        className="inline-flex shrink-0 items-center gap-2 rounded-full bg-foreground px-4 py-2.5 text-sm font-medium text-white transition hover:bg-(--foreground-soft)"
+                        className="inline-flex shrink-0 items-center gap-2 rounded-full bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:bg-(--foreground-soft)"
                       >
                         Open thread
                         <ExternalLink size={14} />
@@ -533,7 +533,7 @@ function LandingView({
                 }`}
               >
                 {msg.role === "user" ? (
-                  <div className="max-w-[85%] rounded-[1.6rem] bg-(--accent-strong) px-5 py-4 text-white shadow-[0_10px_24px_rgba(118,81,54,0.18)]">
+                  <div className="max-w-[85%] rounded-[1.6rem] border border-transparent bg-(--accent-strong) px-5 py-4 text-white shadow-[0_10px_24px_rgba(118,81,54,0.18)] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100">
                     <p className="whitespace-pre-wrap leading-7">{msg.content}</p>
                   </div>
                 ) : (
