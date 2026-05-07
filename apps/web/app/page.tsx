@@ -36,9 +36,8 @@ type MemoriesResponse = {
   threads?: ThreadSummary[];
 };
 
-const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 460;
-const SIDEBAR_DEFAULT_WIDTH = 384;
+const SIDEBAR_DEFAULT_WIDTH = SIDEBAR_MAX_WIDTH;
 const SIDEBAR_COLLAPSED_WIDTH = 84;
 const USER_STORAGE_KEY = "memento_user_id";
 
@@ -776,9 +775,7 @@ export default function Dashboard() {
   const [newFolderName, setNewFolderName] = useState("");
   const [isBrowseExpanded, setIsBrowseExpanded] = useState(true);
   const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [chatMessages, setChatMessages] = useState<
     {
       role: "user" | "assistant";
@@ -878,7 +875,7 @@ export default function Dashboard() {
 
   const resolvedSidebarWidth = isSidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
-    : sidebarWidth;
+    : SIDEBAR_DEFAULT_WIDTH;
 
   const fetchBriefing = useCallback(async () => {
     try {
@@ -1311,36 +1308,6 @@ export default function Dashboard() {
 
     return () => window.clearTimeout(timeoutId);
   }, [fetchBriefing, fetchFolders, fetchMemories, isUserIdReady, userId]);
-
-  useEffect(() => {
-    if (!isResizingSidebar) {
-      return;
-    }
-
-    const handleMouseMove = (event: MouseEvent) => {
-      const nextWidth = Math.min(
-        SIDEBAR_MAX_WIDTH,
-        Math.max(SIDEBAR_MIN_WIDTH, event.clientX),
-      );
-      setSidebarWidth(nextWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-
-    return () => {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isResizingSidebar]);
 
   useEffect(() => {
     return () => {
@@ -1822,17 +1789,6 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-
-          {!isSidebarCollapsed ? (
-            <button
-              type="button"
-              aria-label="Resize sidebar"
-              onMouseDown={() => setIsResizingSidebar(true)}
-              className="absolute inset-y-0 right-0 hidden w-2 translate-x-1/2 cursor-col-resize lg:block"
-            >
-              <span className="absolute inset-y-8 left-1/2 w-px -translate-x-1/2 rounded-full bg-(--line)" />
-            </button>
-          ) : null}
         </aside>
 
         <main
