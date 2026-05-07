@@ -213,6 +213,7 @@ Main files:
 - Folder records support both manual and automatic organization via:
   - `source` (`manual` or `auto`)
   - `auto_key` (stable dedupe key for auto-created folders)
+  - auto-folder reuse should prefer an existing normalized folder name for the same user instead of creating a duplicate auto folder
 
 ### Important Guidance
 - When changing schema, RPCs, or policies, provide exact SQL.

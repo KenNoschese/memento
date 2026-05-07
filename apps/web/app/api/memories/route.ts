@@ -54,6 +54,13 @@ function normalizeEmbedding(
   }
 }
 
+function normalizeFolderLookupName(name: string | null | undefined): string {
+  return (name ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 async function applyAutoFolders({
   userId,
   memories,
@@ -63,13 +70,76 @@ async function applyAutoFolders({
   memories: PageMemoryRecord[];
   foldersById: Map<string, Folder>;
 }) {
-  const threaded = buildThreadMetadata(memories, foldersById);
   const foldersByAutoKey = new Map<string, Folder>();
+  const foldersByNormalizedAutoName = new Map<string, Folder>();
+
+  const sortedFolders = Array.from(foldersById.values()).sort((left, right) => {
+    const createdAtDelta =
+      new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+    return createdAtDelta !== 0 ? createdAtDelta : left.id.localeCompare(right.id);
+  });
+
+  for (const folder of sortedFolders) {
+    if (folder.source !== "auto") {
+      continue;
+    }
+
+    const normalizedName = normalizeFolderLookupName(folder.name);
+    if (!normalizedName) {
+      continue;
+    }
+
+    const canonicalFolder = foldersByNormalizedAutoName.get(normalizedName);
+    if (!canonicalFolder) {
+      foldersByNormalizedAutoName.set(normalizedName, folder);
+      continue;
+    }
+
+    if (canonicalFolder.id === folder.id) {
+      continue;
+    }
+
+    const { error: mergeMemoriesError } = await supabase
+      .from("memories")
+      .update({ folder_id: canonicalFolder.id })
+      .eq("user_id", userId)
+      .eq("folder_id", folder.id);
+
+    if (mergeMemoriesError) {
+      throw mergeMemoriesError;
+    }
+
+    const { error: deleteFolderError } = await supabase
+      .from("folders")
+      .delete()
+      .eq("id", folder.id)
+      .eq("user_id", userId);
+
+    if (deleteFolderError) {
+      throw deleteFolderError;
+    }
+
+    foldersById.delete(folder.id);
+    for (const memory of memories) {
+      if (memory.folder_id === folder.id) {
+        memory.folder_id = canonicalFolder.id;
+      }
+    }
+  }
+
   for (const folder of foldersById.values()) {
     if (folder.source === "auto" && folder.auto_key) {
       foldersByAutoKey.set(folder.auto_key, folder);
     }
+    if (folder.source === "auto") {
+      const normalizedName = normalizeFolderLookupName(folder.name);
+      if (normalizedName && !foldersByNormalizedAutoName.has(normalizedName)) {
+        foldersByNormalizedAutoName.set(normalizedName, folder);
+      }
+    }
   }
+
+  const threaded = buildThreadMetadata(memories, foldersById);
 
   for (const thread of threaded.threads) {
     const bucket = memories.filter((memory) => thread.memoryIds.includes(memory.id));
@@ -99,7 +169,14 @@ async function applyAutoFolders({
       thread.suggestedFolderName
     ) {
       const autoKey = getAutoFolderKey(thread.id);
+      const normalizedSuggestedName = normalizeFolderLookupName(
+        thread.suggestedFolderName,
+      );
       targetFolder = foldersByAutoKey.get(autoKey) ?? null;
+      if (!targetFolder && normalizedSuggestedName) {
+        targetFolder =
+          foldersByNormalizedAutoName.get(normalizedSuggestedName) ?? null;
+      }
 
       if (!targetFolder) {
         const { data, error } = await supabase
@@ -121,7 +198,30 @@ async function applyAutoFolders({
 
         targetFolder = data as Folder;
         foldersByAutoKey.set(autoKey, targetFolder);
+        if (normalizedSuggestedName) {
+          foldersByNormalizedAutoName.set(normalizedSuggestedName, targetFolder);
+        }
         foldersById.set(targetFolder.id, targetFolder);
+      } else if (
+        targetFolder.auto_key !== autoKey &&
+        targetFolder.source === "auto"
+      ) {
+        const { error: syncFolderError } = await supabase
+          .from("folders")
+          .update({ auto_key: autoKey })
+          .eq("id", targetFolder.id)
+          .eq("user_id", userId);
+
+        if (syncFolderError) {
+          throw syncFolderError;
+        }
+
+        targetFolder = {
+          ...targetFolder,
+          auto_key: autoKey,
+        };
+        foldersById.set(targetFolder.id, targetFolder);
+        foldersByAutoKey.set(autoKey, targetFolder);
       }
     }
 
