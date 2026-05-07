@@ -153,14 +153,14 @@ function Logo({ size, className }: { size?: number; className?: string }) {
   return (
     <div className={`relative flex items-center justify-center ${className || ""}`} style={style}>
       <Image
-        src="/logo-light.png"
+        src="/logo_dark.png"
         alt="Memento"
         fill
         className="object-contain block [.dark_&]:hidden"
         priority
       />
       <Image
-        src="/logo-dark.png"
+        src="/logo_light.png"
         alt="Memento"
         fill
         className="object-contain hidden [.dark_&]:block"

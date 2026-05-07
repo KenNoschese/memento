@@ -1,4 +1,4 @@
-import logo from "data-base64:~assets/logo-light.png"
+import logo from "data-base64:~assets/logo_dark.png"
 import { useEffect, useState, type CSSProperties } from "react"
 
 type OperationStatus = {
@@ -339,7 +339,26 @@ function IndexPopup() {
             justifyContent: "space-between",
             gap: 12
           }}>
-          <div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12
+            }}>
+            <img
+              src={logo}
+              alt="Memento"
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: 14,
+                objectFit: "contain",
+                background: palette.surface,
+                border: `1px solid ${palette.line}`,
+                padding: 6
+              }}
+            />
+            <div>
             <div
               style={{
                 fontSize: 10,
@@ -359,6 +378,7 @@ function IndexPopup() {
                 color: palette.foreground
               }}>
               Memento
+            </div>
             </div>
           </div>
 

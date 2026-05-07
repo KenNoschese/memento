@@ -21,6 +21,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Memento Dashboard",
   description: "Semantic web history dashboard",
+  icons: {
+    icon: [
+      { url: "/logo_dark.png", media: "(prefers-color-scheme: light)" },
+      { url: "/logo_light.png", media: "(prefers-color-scheme: dark)" },
+    ],
+    shortcut: "/logo_dark.png",
+    apple: "/logo_dark.png",
+  },
 };
 
 export default function RootLayout({
