@@ -151,7 +151,10 @@ function SectionLabel({
 function Logo({ size, className }: { size?: number; className?: string }) {
   const style = size ? { width: size, height: size } : undefined;
   return (
-    <div className={`relative flex items-center justify-center ${className || ""}`} style={style}>
+    <div
+      className={`relative flex items-center justify-center ${className || ""}`}
+      style={style}
+    >
       <Image
         src="/logo_dark.png"
         alt="Memento"
@@ -395,7 +398,7 @@ function FolderPicker({
         onChange(nextValue === "__none__" ? null : nextValue)
       }
     >
-      <Select.Trigger className="inline-flex items-center gap-3 rounded-2xl border border-(--line) bg-(--surface) py-2.5 pl-4 pr-10 text-sm text-(--muted) shadow-sm transition hover:border-(--accent-edge) hover:text-foreground data-[state=open]:border-(--accent-edge)">
+      <Select.Trigger className="relative inline-flex items-center gap-3 rounded-2xl border border-(--line) bg-(--surface) py-2.5 pl-4 pr-10 text-sm text-(--muted) shadow-sm transition hover:border-(--accent-edge) hover:text-foreground data-[state=open]:border-(--accent-edge)">
         <FolderIcon size={15} className="text-(--muted-strong)" />
         <Select.Value
           placeholder="No Folder"
@@ -529,14 +532,17 @@ function LandingView({
                         </>
                       ) : (
                         <p className="mt-4 text-sm leading-6 text-(--muted)">
-                          No active thread yet. Capture a few pages and a voice note to make the resume layer useful.
+                          No active thread yet. Capture a few pages and a voice
+                          note to make the resume layer useful.
                         </p>
                       )}
                     </div>
                     {threads[0] ? (
                       <button
                         type="button"
-                        onClick={() => onSelectMemory(threads[0].latestMemoryId)}
+                        onClick={() =>
+                          onSelectMemory(threads[0].latestMemoryId)
+                        }
                         className="inline-flex shrink-0 items-center gap-2 rounded-full bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:bg-(--foreground-soft)"
                       >
                         Open thread
@@ -605,12 +611,16 @@ function LandingView({
               >
                 {msg.role === "user" ? (
                   <div className="max-w-[85%] rounded-[1.6rem] border border-transparent bg-(--accent-strong) px-5 py-4 text-white shadow-[0_10px_24px_rgba(118,81,54,0.18)] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100">
-                    <p className="whitespace-pre-wrap leading-7">{msg.content}</p>
+                    <p className="whitespace-pre-wrap leading-7">
+                      {msg.content}
+                    </p>
                   </div>
                 ) : (
                   <div className="w-full max-w-[85%] rounded-[1.7rem] border border-(--line) bg-(--surface) p-4 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <SectionLabel icon={<Logo size={16} className="h-4 w-4" />}>
+                      <SectionLabel
+                        icon={<Logo size={16} className="h-4 w-4" />}
+                      >
                         Memento
                       </SectionLabel>
                       {msg.sources?.length ? (
@@ -621,12 +631,14 @@ function LandingView({
                           </span>
                           <span className="rounded-full bg-(--surface-soft) px-2.5 py-1">
                             {msg.sources.reduce(
-                              (count, source) => count + source.voiceNotes.length,
+                              (count, source) =>
+                                count + source.voiceNotes.length,
                               0,
                             )}{" "}
                             note
                             {msg.sources.reduce(
-                              (count, source) => count + source.voiceNotes.length,
+                              (count, source) =>
+                                count + source.voiceNotes.length,
                               0,
                             ) === 1
                               ? ""
@@ -668,7 +680,9 @@ function LandingView({
                                       <span className="h-1 w-1 rounded-full bg-(--line)" />
                                       <span>
                                         {source.voiceNotes.length} note
-                                        {source.voiceNotes.length === 1 ? "" : "s"}
+                                        {source.voiceNotes.length === 1
+                                          ? ""
+                                          : "s"}
                                       </span>
                                     </>
                                   ) : null}
@@ -761,14 +775,11 @@ export default function Dashboard() {
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [deletingMemoryId, setDeletingMemoryId] = useState<string | null>(null);
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
-  const [confirmDeleteState, setConfirmDeleteState] = useState<
-    | {
-        kind: "memory" | "folder";
-        id: string;
-        label: string;
-      }
-    | null
-  >(null);
+  const [confirmDeleteState, setConfirmDeleteState] = useState<{
+    kind: "memory" | "folder";
+    id: string;
+    label: string;
+  } | null>(null);
   const [expandedVoiceNoteIds, setExpandedVoiceNoteIds] = useState<string[]>(
     [],
   );
@@ -862,7 +873,8 @@ export default function Dashboard() {
             decisionCount: selectedMemory.decision_count ?? 0,
             actionItemCount: selectedMemory.action_item_count ?? 0,
             voiceNoteCount:
-              selectedMemory.voice_note_count ?? selectedMemory.voiceNotes.length,
+              selectedMemory.voice_note_count ??
+              selectedMemory.voiceNotes.length,
           }
         : null,
     [selectedMemory],
@@ -1086,7 +1098,9 @@ export default function Dashboard() {
         throw new Error("error" in data ? data.error : "Delete failed");
       }
 
-      setFolders((current) => current.filter((folder) => folder.id !== folderId));
+      setFolders((current) =>
+        current.filter((folder) => folder.id !== folderId),
+      );
       setMemories((current) =>
         current.map((memory) =>
           memory.folder_id === folderId
@@ -1360,10 +1374,15 @@ export default function Dashboard() {
                 type="button"
                 onClick={() => setSelectedMemoryId(null)}
                 className={`flex items-center text-left ${
-                  isSidebarCollapsed ? "justify-center" : "gap-3"
+                  isSidebarCollapsed
+                    ? "justify-center rounded-2xl transition-transform duration-200 hover:scale-[1.03]"
+                    : "gap-3 rounded-2xl transition-transform duration-200 hover:scale-[1.01]"
                 }`}
               >
-                <Logo size={64} className="h-16 w-16 overflow-hidden rounded-2xl" />
+                <Logo
+                  size={64}
+                  className="h-16 w-16 overflow-hidden rounded-2xl transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(38,33,28,0.1)]"
+                />
                 {!isSidebarCollapsed ? (
                   <div>
                     <div className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
@@ -1412,7 +1431,9 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between gap-2">
                       <button
                         type="button"
-                        onClick={() => setIsBrowseExpanded((current) => !current)}
+                        onClick={() =>
+                          setIsBrowseExpanded((current) => !current)
+                        }
                         className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
                       >
                         <div className="flex min-w-0 items-center gap-3">
@@ -1519,10 +1540,7 @@ export default function Dashboard() {
                                 className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-transparent text-(--muted) transition hover:border-(--line) hover:bg-(--surface) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 {deletingFolderId === folder.id ? (
-                                  <Loader2
-                                    size={14}
-                                    className="animate-spin"
-                                  />
+                                  <Loader2 size={14} className="animate-spin" />
                                 ) : (
                                   <Trash2 size={14} />
                                 )}
@@ -1539,9 +1557,6 @@ export default function Dashboard() {
                               <FolderIcon size={16} />
                             </span>
                             <div className="min-w-0">
-                              <div className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-(--muted)">
-                                Browse
-                              </div>
                               <div className="truncate text-sm text-foreground/85">
                                 {selectedBrowseLabel}
                               </div>
@@ -1554,7 +1569,10 @@ export default function Dashboard() {
 
                         <div className="pointer-events-none absolute left-0 right-0 top-[calc(100%-0.35rem)] z-30 origin-top scale-[0.98] rounded-[1.1rem] border border-(--line) bg-(--surface) p-3 opacity-0 shadow-xl transition duration-150 group-hover/browse:pointer-events-auto group-hover/browse:scale-100 group-hover/browse:opacity-100 group-focus-within/browse:pointer-events-auto group-focus-within/browse:scale-100 group-focus-within/browse:opacity-100">
                           {isCreatingFolder ? (
-                            <form onSubmit={handleCreateFolder} className="mb-3 px-1">
+                            <form
+                              onSubmit={handleCreateFolder}
+                              className="mb-3 px-1"
+                            >
                               <input
                                 autoFocus
                                 type="text"
@@ -1665,7 +1683,11 @@ export default function Dashboard() {
                     </button>
                     {isSignalsExpanded ? (
                       <div className="mt-3 px-1">
-                        <div className="flex flex-wrap gap-2">
+                        <div
+                          className="max-h-40 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--line) hover:[&::-webkit-scrollbar-thumb]:bg-(--muted)"
+                          style={{ scrollbarColor: "var(--line) transparent" }}
+                        >
+                          <div className="flex flex-wrap gap-2">
                           {allTags.length > 0 ? (
                             allTags.map((tag) => (
                               <button
@@ -1692,6 +1714,7 @@ export default function Dashboard() {
                             </span>
                           )}
                         </div>
+                        </div>
                       </div>
                     ) : null}
                   </section>
@@ -1699,9 +1722,7 @@ export default function Dashboard() {
                   <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div className="mb-3 flex items-center justify-between gap-3 px-1">
                       <SectionLabel icon={<Brain size={13} />}>
-                        {highlightedIds.length > 0
-                          ? "Matches"
-                          : "Work Streams"}
+                        {highlightedIds.length > 0 ? "Matches" : "Work Streams"}
                       </SectionLabel>
                       <span className="text-xs text-(--muted)">
                         {highlightedIds.length > 0
@@ -1735,8 +1756,7 @@ export default function Dashboard() {
                                     relatedMemoryIds:
                                       memory.related_memory_ids ?? [],
                                     hasOpenLoop: Boolean(memory.has_open_loop),
-                                    decisionCount:
-                                      memory.decision_count ?? 0,
+                                    decisionCount: memory.decision_count ?? 0,
                                     actionItemCount:
                                       memory.action_item_count ?? 0,
                                     voiceNoteCount:
@@ -1786,10 +1806,10 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setSelectedMemoryId(null)}
-                  className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl transition hover:opacity-80"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-(--line) bg-(--surface) text-(--muted) transition hover:text-foreground"
                   aria-label="Open briefing"
                 >
-                  <Logo className="h-full w-full" />
+                  <Brain size={18} />
                 </button>
               </div>
             )}
@@ -1828,7 +1848,8 @@ export default function Dashboard() {
                         <span className="truncate">{selectedMemory.url}</span>
                       </a>
                     </div>
-                    {(selectedMemory.tags?.length ?? 0) > 0 || selectedSignal ? (
+                    {(selectedMemory.tags?.length ?? 0) > 0 ||
+                    selectedSignal ? (
                       <div className="mt-5 flex flex-wrap gap-2">
                         {selectedSignal ? (
                           <span className="rounded-full bg-(--accent-soft) px-3 py-1.5 text-xs font-medium text-(--accent)">
@@ -1882,11 +1903,6 @@ export default function Dashboard() {
                   <SectionLabel icon={<Sparkles size={14} />}>
                     Page Summary
                   </SectionLabel>
-                  {selectedSignal ? (
-                    <p className="mt-3 text-sm leading-6 text-(--muted)">
-                      {selectedSignal.resumeReason}
-                    </p>
-                  ) : null}
                   <article className="mt-5 max-w-3xl whitespace-pre-wrap text-[1.02rem] leading-8 text-(--foreground-soft)">
                     {selectedMemory.summary?.trim() ||
                       selectedMemory.content?.trim() ||
@@ -1906,7 +1922,9 @@ export default function Dashboard() {
                             onClick={() => setSelectedMemoryId(memory.id)}
                             className="inline-flex max-w-full items-center gap-2 rounded-full border border-(--line) bg-(--surface-soft) px-3 py-2 text-left text-xs text-(--muted-strong) transition hover:border-(--accent-edge) hover:text-foreground"
                           >
-                            <span className="truncate">{getMemoryTitle(memory)}</span>
+                            <span className="truncate">
+                              {getMemoryTitle(memory)}
+                            </span>
                           </button>
                         ))}
                       </div>

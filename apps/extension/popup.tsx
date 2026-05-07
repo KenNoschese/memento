@@ -332,11 +332,9 @@ function IndexPopup() {
         lastIndex: popupStatus.lastIndex,
         lastVoiceNote: popupStatus.lastVoiceNote
       }
-      console.log("Popup: refreshState", state)
       setPopupState(state)
       setErrorMessage(null)
     } catch (error) {
-      console.error("Popup: refreshState failed", error)
       setErrorMessage("Unable to load extension state")
     } finally {
       setIsLoading(false)
@@ -391,16 +389,13 @@ function IndexPopup() {
   const sendRecordingAction = async (type: "start-record" | "stop-record") => {
     setIsWorking(true)
     setErrorMessage(null)
-    console.log("Popup: sendRecordingAction", { type, popupState })
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      await chrome.runtime.sendMessage({
         type,
         target: "background"
       })
-      console.log("Popup: sendRecordingAction response", { type, response })
     } catch (error) {
-      console.error("Popup: sendRecordingAction failed", { type, error })
       setErrorMessage(
         type === "start-record"
           ? "Unable to start recording"
