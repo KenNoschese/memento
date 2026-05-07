@@ -148,6 +148,24 @@ function SectionLabel({
   );
 }
 
+function Logo({ size, className }: { size?: number; className?: string }) {
+  const style = size ? { width: size, height: size } : undefined;
+  return (
+    <div className={`relative flex items-center justify-center ${className || ""}`} style={style}>
+      <img
+        src="/logo-light.png"
+        alt="Memento"
+        className="h-full w-full object-contain block [.dark_&]:hidden"
+      />
+      <img
+        src="/logo-dark.png"
+        alt="Memento"
+        className="h-full w-full object-contain hidden [.dark_&]:block"
+      />
+    </div>
+  );
+}
+
 function SidebarFilterButton({
   active,
   onClick,
@@ -608,7 +626,7 @@ function LandingView({
                 ) : (
                   <div className="w-full max-w-[85%] rounded-[1.7rem] border border-(--line) bg-(--surface) p-4 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <SectionLabel icon={<Brain size={13} />}>
+                      <SectionLabel icon={<Logo size={16} className="h-4 w-4" />}>
                         Memento
                       </SectionLabel>
                       {msg.sources?.length ? (
@@ -1378,9 +1396,7 @@ export default function Dashboard() {
                   isSidebarCollapsed ? "justify-center" : "gap-3"
                 }`}
               >
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-(--surface) text-(--accent) ring-1 ring-(--line)">
-                  <Brain size={19} />
-                </span>
+                <Logo size={64} className="h-16 w-16 overflow-hidden rounded-2xl" />
                 {!isSidebarCollapsed ? (
                   <div>
                     <div className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
@@ -1803,10 +1819,10 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setSelectedMemoryId(null)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-(--line) bg-(--surface) text-(--muted) transition hover:text-foreground"
+                  className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl transition hover:opacity-80"
                   aria-label="Open briefing"
                 >
-                  <Brain size={18} />
+                  <Logo className="h-full w-full" />
                 </button>
               </div>
             )}

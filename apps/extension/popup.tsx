@@ -1,5 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react"
 
+import logo from "data-base64:~assets/logo-light.png"
+
 type OperationStatus = {
   ok: boolean
   at: number
@@ -474,6 +476,16 @@ function IndexPopup() {
               color: palette.mutedStrong,
               border: `1px solid ${palette.line}`,
               fontWeight: 600
+            }}>
+            Settings
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default IndexPopup
             }}>
             Settings
           </button>
