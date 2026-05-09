@@ -41,6 +41,7 @@ const SIDEBAR_MAX_WIDTH = 460;
 const SIDEBAR_DEFAULT_WIDTH = SIDEBAR_MAX_WIDTH;
 const SIDEBAR_COLLAPSED_WIDTH = 84;
 const USER_STORAGE_KEY = "memento_user_id";
+const WORKSPACE_REFRESH_INTERVAL_MS = 15000;
 
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString([], {
@@ -164,14 +165,14 @@ function Logo({ size, className }: { size?: number; className?: string }) {
         src="/logo_dark.png"
         alt="Memento"
         fill
-        className="object-contain block [.dark_&]:hidden"
+        className="object-contain block in-[.dark]:hidden"
         priority
       />
       <Image
         src="/logo_light.png"
         alt="Memento"
         fill
-        className="object-contain hidden [.dark_&]:block"
+        className="object-contain hidden in-[.dark]:block"
         priority
       />
     </div>
@@ -498,7 +499,7 @@ function LandingView({
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-6 sm:px-8">
       <div className="pb-6">
-        <section className="mb-8 overflow-hidden rounded-[2rem] border border-(--line) bg-[linear-gradient(135deg,var(--surface)_0%,var(--surface)_58%,var(--accent-soft)_100%)] px-6 py-6 shadow-sm sm:px-8">
+        <section className="mb-8 overflow-hidden rounded-4xl border border-(--line) bg-[linear-gradient(135deg,var(--surface)_0%,var(--surface)_58%,var(--accent-soft)_100%)] px-6 py-6 shadow-sm sm:px-8">
           <div className="flex items-center">
             <SectionLabel icon={<Sparkles size={14} />}>
               Resume Desk
@@ -665,7 +666,7 @@ function LandingView({
                           Sources
                         </div>
                         <div className="space-y-2.5">
-                          {msg.sources.slice(0, 3).map((source) => (
+                          {msg.sources.map((source) => (
                             <button
                               key={source.id}
                               onClick={() => onSelectMemory(source.id)}
@@ -717,7 +718,7 @@ function LandingView({
         <div ref={chatEndRef} />
       </div>
 
-      <div className="sticky bottom-0 mt-2 border-t border-(--line) bg-gradient-to-t from-(--background) via-(--background) to-transparent px-4 pb-8 pt-6 sm:px-8">
+      <div className="sticky bottom-0 mt-2 border-t border-(--line) bg-linear-to-t from-(--background) via-(--background) to-transparent px-4 pb-8 pt-6 sm:px-8">
         <div className="group/chat mx-auto max-w-3xl">
           <form
             onSubmit={handleSubmit}
@@ -822,6 +823,8 @@ export default function DashboardClient() {
 
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const refreshInFlightRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
 
   const sortedMemories = useMemo(
     () =>
@@ -1015,7 +1018,15 @@ export default function DashboardClient() {
       const records = data.memories ?? [];
       setMemories(records);
       setThreads(data.threads ?? []);
-      setSelectedMemoryId((currentId) => currentId);
+      setSelectedMemoryId((currentId) => {
+        if (!currentId) {
+          return null;
+        }
+
+        return records.some((memory) => memory.id === currentId)
+          ? currentId
+          : records[0]?.id ?? null;
+      });
     } catch (error) {
       console.error("Failed to fetch memories:", error);
       setMemories([]);
@@ -1024,58 +1035,109 @@ export default function DashboardClient() {
     }
   }, [userId]);
 
-  const deleteMemoryById = useCallback(async (memoryId: string) => {
-    setDeletingMemoryId(memoryId);
+  const fetchFolders = useCallback(async () => {
+    if (!userId) {
+      setFolders([]);
+      return;
+    }
 
     try {
-      const response = await fetch("/api/memories", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: memoryId }),
-      });
-      const data = (await response.json()) as
-        | { success: boolean }
-        | { error: string };
+      const response = await fetch(
+        `/api/folders?memento_user_id=${encodeURIComponent(userId)}`,
+      );
+      const data = (await response.json()) as { folders: Folder[] };
+      setFolders(data.folders || []);
+    } catch (error) {
+      console.error("Failed to fetch folders:", error);
+    }
+  }, [userId]);
 
-      if (!response.ok || "error" in data) {
-        throw new Error("error" in data ? data.error : "Delete failed");
-      }
+  const refreshWorkspace = useCallback(async () => {
+    if (!userId) {
+      setMemories([]);
+      setThreads([]);
+      setFolders([]);
+      setSelectedMemoryId(null);
+      return;
+    }
 
-      setMemories((current) => {
-        const next: PageMemoryRecord[] = [];
+    if (refreshInFlightRef.current) {
+      pendingRefreshRef.current = true;
+      return;
+    }
 
-        for (const page of current) {
-          if (page.id === memoryId) {
-            continue;
-          }
+    refreshInFlightRef.current = true;
 
-          next.push({
-            ...page,
-            voiceNotes: page.voiceNotes.filter((note) => note.id !== memoryId),
-            matchedVoiceNoteIds: page.matchedVoiceNoteIds?.filter(
-              (id) => id !== memoryId,
-            ),
-          });
+    try {
+      do {
+        pendingRefreshRef.current = false;
+        await fetchMemories();
+        await fetchFolders();
+        await fetchBriefing();
+      } while (pendingRefreshRef.current);
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [fetchBriefing, fetchFolders, fetchMemories, userId]);
+
+  const deleteMemoryById = useCallback(
+    async (memoryId: string) => {
+      setDeletingMemoryId(memoryId);
+
+      try {
+        const response = await fetch("/api/memories", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: memoryId }),
+        });
+        const data = (await response.json()) as
+          | { success: boolean }
+          | { error: string };
+
+        if (!response.ok || "error" in data) {
+          throw new Error("error" in data ? data.error : "Delete failed");
         }
 
-        setSelectedMemoryId((currentId) => {
-          if (currentId !== memoryId) {
-            return currentId;
+        setMemories((current) => {
+          const next: PageMemoryRecord[] = [];
+
+          for (const page of current) {
+            if (page.id === memoryId) {
+              continue;
+            }
+
+            next.push({
+              ...page,
+              voiceNotes: page.voiceNotes.filter(
+                (note) => note.id !== memoryId,
+              ),
+              matchedVoiceNoteIds: page.matchedVoiceNoteIds?.filter(
+                (id) => id !== memoryId,
+              ),
+            });
           }
 
-          return next[0]?.id ?? null;
+          setSelectedMemoryId((currentId) => {
+            if (currentId !== memoryId) {
+              return currentId;
+            }
+
+            return next[0]?.id ?? null;
+          });
+
+          return next;
         });
 
-        return next;
-      });
-
-      setHighlightedIds((current) => current.filter((id) => id !== memoryId));
-    } catch (error) {
-      console.error("Delete failed:", error);
-    } finally {
-      setDeletingMemoryId(null);
-    }
-  }, []);
+        setHighlightedIds((current) => current.filter((id) => id !== memoryId));
+        await refreshWorkspace();
+      } catch (error) {
+        console.error("Delete failed:", error);
+      } finally {
+        setDeletingMemoryId(null);
+      }
+    },
+    [refreshWorkspace],
+  );
 
   const handleDeleteMemory = useCallback((memoryId: string, label: string) => {
     setConfirmDeleteState({
@@ -1085,43 +1147,49 @@ export default function DashboardClient() {
     });
   }, []);
 
-  const deleteFolderById = useCallback(async (folderId: string) => {
-    setDeletingFolderId(folderId);
+  const deleteFolderById = useCallback(
+    async (folderId: string) => {
+      setDeletingFolderId(folderId);
 
-    try {
-      const response = await fetch("/api/folders", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: folderId }),
-      });
-      const data = (await response.json()) as
-        | { success: boolean }
-        | { error: string };
+      try {
+        const response = await fetch("/api/folders", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: folderId }),
+        });
+        const data = (await response.json()) as
+          | { success: boolean }
+          | { error: string };
 
-      if (!response.ok || "error" in data) {
-        throw new Error("error" in data ? data.error : "Delete failed");
+        if (!response.ok || "error" in data) {
+          throw new Error("error" in data ? data.error : "Delete failed");
+        }
+
+        setFolders((current) =>
+          current.filter((folder) => folder.id !== folderId),
+        );
+        setMemories((current) =>
+          current.map((memory) =>
+            memory.folder_id === folderId
+              ? {
+                  ...memory,
+                  folder_id: null,
+                }
+              : memory,
+          ),
+        );
+        setSelectedFolderId((current) =>
+          current === folderId ? null : current,
+        );
+        await refreshWorkspace();
+      } catch (error) {
+        console.error("Delete folder failed:", error);
+      } finally {
+        setDeletingFolderId(null);
       }
-
-      setFolders((current) =>
-        current.filter((folder) => folder.id !== folderId),
-      );
-      setMemories((current) =>
-        current.map((memory) =>
-          memory.folder_id === folderId
-            ? {
-                ...memory,
-                folder_id: null,
-              }
-            : memory,
-        ),
-      );
-      setSelectedFolderId((current) => (current === folderId ? null : current));
-    } catch (error) {
-      console.error("Delete folder failed:", error);
-    } finally {
-      setDeletingFolderId(null);
-    }
-  }, []);
+    },
+    [refreshWorkspace],
+  );
 
   const handleDeleteFolder = useCallback((folderId: string, label: string) => {
     setConfirmDeleteState({
@@ -1169,23 +1237,6 @@ export default function DashboardClient() {
     );
   }, []);
 
-  const fetchFolders = useCallback(async () => {
-    if (!userId) {
-      setFolders([]);
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `/api/folders?memento_user_id=${encodeURIComponent(userId)}`,
-      );
-      const data = (await response.json()) as { folders: Folder[] };
-      setFolders(data.folders || []);
-    } catch (error) {
-      console.error("Failed to fetch folders:", error);
-    }
-  }, [userId]);
-
   const handleCreateFolder = async (event: FormEvent) => {
     event.preventDefault();
     if (!newFolderName.trim()) return;
@@ -1203,7 +1254,7 @@ export default function DashboardClient() {
       if (response.ok) {
         setNewFolderName("");
         setIsCreatingFolder(false);
-        void fetchFolders();
+        await refreshWorkspace();
       }
     } catch (error) {
       console.error("Failed to create folder:", error);
@@ -1222,7 +1273,7 @@ export default function DashboardClient() {
       });
 
       if (response.ok) {
-        void fetchMemories();
+        await refreshWorkspace();
       }
     } catch (error) {
       console.error("Failed to move memory to folder:", error);
@@ -1324,13 +1375,42 @@ export default function DashboardClient() {
     }, 0);
 
     const timeoutId = window.setTimeout(() => {
-      void fetchBriefing();
-      void fetchMemories();
-      void fetchFolders();
+      void refreshWorkspace();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [fetchBriefing, fetchFolders, fetchMemories, isUserIdReady, userId]);
+  }, [isUserIdReady, refreshWorkspace, userId]);
+
+  useEffect(() => {
+    if (!isUserIdReady || !userId) {
+      return;
+    }
+
+    const handleWindowFocus = () => {
+      void refreshWorkspace();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void refreshWorkspace();
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (!document.hidden) {
+        void refreshWorkspace();
+      }
+    }, WORKSPACE_REFRESH_INTERVAL_MS);
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isUserIdReady, refreshWorkspace, userId]);
 
   useEffect(() => {
     return () => {

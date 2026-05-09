@@ -9,6 +9,10 @@ type MemoryTagsRow = {
   tags: string[] | null;
 };
 
+type ChatAnswerPayload = {
+  answer: string;
+};
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -96,6 +100,50 @@ async function generateChatText(
   throw lastError ?? new Error("Gemini chat generation failed");
 }
 
+function stripCodeFence(text: string) {
+  return text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function parseChatAnswerPayload(text: string): ChatAnswerPayload | null {
+  try {
+    const parsed = JSON.parse(stripCodeFence(text)) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    const answer =
+      "answer" in parsed && typeof parsed.answer === "string"
+        ? parsed.answer.trim()
+        : "";
+
+    if (!answer) {
+      return null;
+    }
+
+    return {
+      answer,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function extractCitedSourceTokens(answer: string) {
+  const matches = answer.match(/\[S\d+\]/g) ?? [];
+  return Array.from(new Set(matches.map((match) => match.slice(1, -1))));
+}
+
+function stripSourceCitations(answer: string) {
+  return answer
+    .replace(/\s*\[S\d+\]/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export async function POST(req: Request) {
   try {
     const { query, history, memento_user_id } = await req.json();
@@ -173,24 +221,36 @@ Standalone search query:`;
       groupedMatchIds.add(pageId);
     }
     const pageIds = Array.from(groupedMatchIds);
+    const pageOrder = new Map<string, number>();
+    pageIds.forEach((id, index) => pageOrder.set(id, index));
 
-    // Fetch full records for these pages (including folder_id, tags, etc.)
-    const { data: fullPages, error: pagesError } = await supabase
-      .from("memories")
-      .select("*")
-      .eq("type", "page")
-      .eq("user_id", resolvedUserId)
-      .in("id", pageIds);
+    const { data: fullPages, error: pagesError } =
+      pageIds.length > 0
+        ? await supabase
+            .from("memories")
+            .select("*")
+            .eq("type", "page")
+            .eq("user_id", resolvedUserId)
+            .in("id", pageIds)
+        : { data: [], error: null };
 
     if (pagesError) {
       console.error("Chat API: Error fetching full pages:", pagesError.message);
       throw pagesError;
     }
 
-    const sources: PageMemoryRecord[] = (fullPages || []).map(p => ({
-      ...p,
-      voiceNotes: [] // Will be populated below
-    }));
+    const sources: PageMemoryRecord[] = (fullPages || [])
+      .map((page) => ({
+        ...page,
+        type: "page" as const,
+        parent_memory_id: null,
+        is_placeholder: Boolean(page.is_placeholder),
+        analysis: normalizeVoiceNoteAnalysis(page.analysis),
+        voiceNotes: [],
+      }))
+      .sort((left, right) => {
+        return (pageOrder.get(left.id) ?? 0) - (pageOrder.get(right.id) ?? 0);
+      });
 
     // Fetch Workspace Summary: All folders with item counts
     const { data: workspaceFolders } = await supabase
@@ -236,12 +296,15 @@ Standalone search query:`;
 
     // Fetch attached voice notes
     const sourceIds = sources.map(s => s.id);
-    const { data: voiceNotesData } = await supabase
-      .from("memories")
-      .select("*")
-      .in("parent_memory_id", sourceIds)
-      .eq("type", "voice_note")
-      .eq("user_id", resolvedUserId);
+    const { data: voiceNotesData } =
+      sourceIds.length > 0
+        ? await supabase
+            .from("memories")
+            .select("*")
+            .in("parent_memory_id", sourceIds)
+            .eq("type", "voice_note")
+            .eq("user_id", resolvedUserId)
+        : { data: [] };
 
     const voiceNotesMap = new Map<string, VoiceNoteRecord[]>();
     (voiceNotesData || []).forEach(vn => {
@@ -250,7 +313,10 @@ Standalone search query:`;
       voiceNotesMap.get(parentId)!.push(vn as VoiceNoteRecord);
     });
 
+    const sourceIdByToken = new Map<string, string>();
     const contextParts = sources.map((source, idx) => {
+      const sourceToken = `S${idx + 1}`;
+      sourceIdByToken.set(sourceToken, source.id);
       const folderName = source.folder_id ? foldersMap.get(source.folder_id) : "None (Unorganized)";
       const notes = voiceNotesMap.get(source.id) || [];
       const notesContext = notes.map(n => {
@@ -261,7 +327,7 @@ Standalone search query:`;
         return `- Voice Note: "${n.content}"\n  Summary: ${n.summary}\n  Key insights: ${insights}`;
       }).join("\n");
 
-      return `[Source ${idx + 1}]
+      return `[${sourceToken}]
 Title: ${source.title}
 URL: ${source.url}
 Folder: ${folderName}
@@ -290,7 +356,11 @@ INSTRUCTIONS:
 3. If the search results (CONTEXT) don't show the items for a folder the user mentioned, explain that you can see the folder exists in their workspace but the specific items weren't retrieved in the top search results.
 4. If the answer is not in the context, say "I couldn't find that in your recent browsing history." Do not guess.
 5. Be concise and conversational.
-6. Do not include source lists, URLs, footnotes, or citations in the answer text. The UI will show sources separately.`;
+6. Return valid JSON only in this shape: {"answer":"string"}.
+7. In the answer string, add inline citations using the exact source token for every claim you make, for example [S1].
+8. Cite the minimum number of sources needed. If one source supports the answer, cite only one source.
+9. If the answer is not supported by the context, reply exactly "I couldn't find that in your recent browsing history." with no citations.
+10. Do not include URLs or a separate source list in the answer text.`;
 
     const conversationTranscript = (history || [])
       .map(
@@ -315,16 +385,37 @@ ${prompt}`,
 
     console.log("Chat API: Answer generated with model:", chatResponse.model);
 
-    const answer = chatResponse.text || "I'm sorry, I couldn't generate an answer.";
+    const parsedAnswer = parseChatAnswerPayload(chatResponse.text);
+    const answerWithCitations =
+      parsedAnswer?.answer || chatResponse.text || "I'm sorry, I couldn't generate an answer.";
+    const answer = stripSourceCitations(answerWithCitations);
+    const citedSourceTokens = extractCitedSourceTokens(answerWithCitations);
+    const groundedSourceIds = new Set<string>();
+    for (const sourceToken of citedSourceTokens) {
+      const sourceId = sourceIdByToken.get(sourceToken);
+      if (sourceId) {
+        groundedSourceIds.add(sourceId);
+      }
+    }
+
+    if (
+      answer === "I couldn't find that in your recent browsing history."
+    ) {
+      groundedSourceIds.clear();
+    }
+
+    const groundedSources = sources
+      .filter((source) => groundedSourceIds.has(source.id))
+      .map((source) => ({
+        ...source,
+        voiceNotes: voiceNotesMap.get(source.id) || [],
+      }));
 
     // 5. Final response
     return NextResponse.json(
       {
         answer,
-        sources: sources.map(s => ({
-          ...s,
-          voiceNotes: voiceNotesMap.get(s.id) || []
-        }))
+        sources: groundedSources,
       },
       { headers: corsHeaders },
     );
