@@ -165,14 +165,14 @@ function Logo({ size, className }: { size?: number; className?: string }) {
         src="/logo_dark.png"
         alt="Memento"
         fill
-        className="object-contain block [.dark_&]:hidden"
+        className="object-contain block in-[.dark]:hidden"
         priority
       />
       <Image
         src="/logo_light.png"
         alt="Memento"
         fill
-        className="object-contain hidden [.dark_&]:block"
+        className="object-contain hidden in-[.dark]:block"
         priority
       />
     </div>
@@ -499,7 +499,7 @@ function LandingView({
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-6 sm:px-8">
       <div className="pb-6">
-        <section className="mb-8 overflow-hidden rounded-[2rem] border border-(--line) bg-[linear-gradient(135deg,var(--surface)_0%,var(--surface)_58%,var(--accent-soft)_100%)] px-6 py-6 shadow-sm sm:px-8">
+        <section className="mb-8 overflow-hidden rounded-4xl border border-(--line) bg-[linear-gradient(135deg,var(--surface)_0%,var(--surface)_58%,var(--accent-soft)_100%)] px-6 py-6 shadow-sm sm:px-8">
           <div className="flex items-center">
             <SectionLabel icon={<Sparkles size={14} />}>
               Resume Desk
@@ -718,7 +718,7 @@ function LandingView({
         <div ref={chatEndRef} />
       </div>
 
-      <div className="sticky bottom-0 mt-2 border-t border-(--line) bg-gradient-to-t from-(--background) via-(--background) to-transparent px-4 pb-8 pt-6 sm:px-8">
+      <div className="sticky bottom-0 mt-2 border-t border-(--line) bg-linear-to-t from-(--background) via-(--background) to-transparent px-4 pb-8 pt-6 sm:px-8">
         <div className="group/chat mx-auto max-w-3xl">
           <form
             onSubmit={handleSubmit}
@@ -1080,59 +1080,64 @@ export default function DashboardClient() {
     }
   }, [fetchBriefing, fetchFolders, fetchMemories, userId]);
 
-  const deleteMemoryById = useCallback(async (memoryId: string) => {
-    setDeletingMemoryId(memoryId);
+  const deleteMemoryById = useCallback(
+    async (memoryId: string) => {
+      setDeletingMemoryId(memoryId);
 
-    try {
-      const response = await fetch("/api/memories", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: memoryId }),
-      });
-      const data = (await response.json()) as
-        | { success: boolean }
-        | { error: string };
+      try {
+        const response = await fetch("/api/memories", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: memoryId }),
+        });
+        const data = (await response.json()) as
+          | { success: boolean }
+          | { error: string };
 
-      if (!response.ok || "error" in data) {
-        throw new Error("error" in data ? data.error : "Delete failed");
-      }
-
-      setMemories((current) => {
-        const next: PageMemoryRecord[] = [];
-
-        for (const page of current) {
-          if (page.id === memoryId) {
-            continue;
-          }
-
-          next.push({
-            ...page,
-            voiceNotes: page.voiceNotes.filter((note) => note.id !== memoryId),
-            matchedVoiceNoteIds: page.matchedVoiceNoteIds?.filter(
-              (id) => id !== memoryId,
-            ),
-          });
+        if (!response.ok || "error" in data) {
+          throw new Error("error" in data ? data.error : "Delete failed");
         }
 
-        setSelectedMemoryId((currentId) => {
-          if (currentId !== memoryId) {
-            return currentId;
+        setMemories((current) => {
+          const next: PageMemoryRecord[] = [];
+
+          for (const page of current) {
+            if (page.id === memoryId) {
+              continue;
+            }
+
+            next.push({
+              ...page,
+              voiceNotes: page.voiceNotes.filter(
+                (note) => note.id !== memoryId,
+              ),
+              matchedVoiceNoteIds: page.matchedVoiceNoteIds?.filter(
+                (id) => id !== memoryId,
+              ),
+            });
           }
 
-          return next[0]?.id ?? null;
+          setSelectedMemoryId((currentId) => {
+            if (currentId !== memoryId) {
+              return currentId;
+            }
+
+            return next[0]?.id ?? null;
+          });
+
+          return next;
         });
 
-        return next;
-      });
-
-      setHighlightedIds((current) => current.filter((id) => id !== memoryId));
-      await refreshWorkspace();
-    } catch (error) {
-      console.error("Delete failed:", error);
-    } finally {
-      setDeletingMemoryId(null);
-    }
-  }, [refreshWorkspace]);
+        setHighlightedIds((current) => current.filter((id) => id !== memoryId));
+        await refreshWorkspace();
+      } catch (error) {
+        console.error("Delete failed:", error);
+      } finally {
+        setDeletingMemoryId(null);
+      }
+    },
+    [refreshWorkspace],
+  );
 
   const handleDeleteMemory = useCallback((memoryId: string, label: string) => {
     setConfirmDeleteState({
@@ -1142,44 +1147,49 @@ export default function DashboardClient() {
     });
   }, []);
 
-  const deleteFolderById = useCallback(async (folderId: string) => {
-    setDeletingFolderId(folderId);
+  const deleteFolderById = useCallback(
+    async (folderId: string) => {
+      setDeletingFolderId(folderId);
 
-    try {
-      const response = await fetch("/api/folders", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: folderId }),
-      });
-      const data = (await response.json()) as
-        | { success: boolean }
-        | { error: string };
+      try {
+        const response = await fetch("/api/folders", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: folderId }),
+        });
+        const data = (await response.json()) as
+          | { success: boolean }
+          | { error: string };
 
-      if (!response.ok || "error" in data) {
-        throw new Error("error" in data ? data.error : "Delete failed");
+        if (!response.ok || "error" in data) {
+          throw new Error("error" in data ? data.error : "Delete failed");
+        }
+
+        setFolders((current) =>
+          current.filter((folder) => folder.id !== folderId),
+        );
+        setMemories((current) =>
+          current.map((memory) =>
+            memory.folder_id === folderId
+              ? {
+                  ...memory,
+                  folder_id: null,
+                }
+              : memory,
+          ),
+        );
+        setSelectedFolderId((current) =>
+          current === folderId ? null : current,
+        );
+        await refreshWorkspace();
+      } catch (error) {
+        console.error("Delete folder failed:", error);
+      } finally {
+        setDeletingFolderId(null);
       }
-
-      setFolders((current) =>
-        current.filter((folder) => folder.id !== folderId),
-      );
-      setMemories((current) =>
-        current.map((memory) =>
-          memory.folder_id === folderId
-            ? {
-                ...memory,
-                folder_id: null,
-              }
-            : memory,
-        ),
-      );
-      setSelectedFolderId((current) => (current === folderId ? null : current));
-      await refreshWorkspace();
-    } catch (error) {
-      console.error("Delete folder failed:", error);
-    } finally {
-      setDeletingFolderId(null);
-    }
-  }, [refreshWorkspace]);
+    },
+    [refreshWorkspace],
+  );
 
   const handleDeleteFolder = useCallback((folderId: string, label: string) => {
     setConfirmDeleteState({
