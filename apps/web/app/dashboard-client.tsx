@@ -41,6 +41,7 @@ const SIDEBAR_MAX_WIDTH = 460;
 const SIDEBAR_DEFAULT_WIDTH = SIDEBAR_MAX_WIDTH;
 const SIDEBAR_COLLAPSED_WIDTH = 84;
 const USER_STORAGE_KEY = "memento_user_id";
+const WORKSPACE_REFRESH_INTERVAL_MS = 15000;
 
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString([], {
@@ -665,7 +666,7 @@ function LandingView({
                           Sources
                         </div>
                         <div className="space-y-2.5">
-                          {msg.sources.slice(0, 3).map((source) => (
+                          {msg.sources.map((source) => (
                             <button
                               key={source.id}
                               onClick={() => onSelectMemory(source.id)}
@@ -822,6 +823,8 @@ export default function DashboardClient() {
 
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const refreshInFlightRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
 
   const sortedMemories = useMemo(
     () =>
@@ -1015,7 +1018,15 @@ export default function DashboardClient() {
       const records = data.memories ?? [];
       setMemories(records);
       setThreads(data.threads ?? []);
-      setSelectedMemoryId((currentId) => currentId);
+      setSelectedMemoryId((currentId) => {
+        if (!currentId) {
+          return null;
+        }
+
+        return records.some((memory) => memory.id === currentId)
+          ? currentId
+          : records[0]?.id ?? null;
+      });
     } catch (error) {
       console.error("Failed to fetch memories:", error);
       setMemories([]);
@@ -1023,6 +1034,51 @@ export default function DashboardClient() {
       setSelectedMemoryId(null);
     }
   }, [userId]);
+
+  const fetchFolders = useCallback(async () => {
+    if (!userId) {
+      setFolders([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/folders?memento_user_id=${encodeURIComponent(userId)}`,
+      );
+      const data = (await response.json()) as { folders: Folder[] };
+      setFolders(data.folders || []);
+    } catch (error) {
+      console.error("Failed to fetch folders:", error);
+    }
+  }, [userId]);
+
+  const refreshWorkspace = useCallback(async () => {
+    if (!userId) {
+      setMemories([]);
+      setThreads([]);
+      setFolders([]);
+      setSelectedMemoryId(null);
+      return;
+    }
+
+    if (refreshInFlightRef.current) {
+      pendingRefreshRef.current = true;
+      return;
+    }
+
+    refreshInFlightRef.current = true;
+
+    try {
+      do {
+        pendingRefreshRef.current = false;
+        await fetchMemories();
+        await fetchFolders();
+        await fetchBriefing();
+      } while (pendingRefreshRef.current);
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [fetchBriefing, fetchFolders, fetchMemories, userId]);
 
   const deleteMemoryById = useCallback(async (memoryId: string) => {
     setDeletingMemoryId(memoryId);
@@ -1070,12 +1126,13 @@ export default function DashboardClient() {
       });
 
       setHighlightedIds((current) => current.filter((id) => id !== memoryId));
+      await refreshWorkspace();
     } catch (error) {
       console.error("Delete failed:", error);
     } finally {
       setDeletingMemoryId(null);
     }
-  }, []);
+  }, [refreshWorkspace]);
 
   const handleDeleteMemory = useCallback((memoryId: string, label: string) => {
     setConfirmDeleteState({
@@ -1116,12 +1173,13 @@ export default function DashboardClient() {
         ),
       );
       setSelectedFolderId((current) => (current === folderId ? null : current));
+      await refreshWorkspace();
     } catch (error) {
       console.error("Delete folder failed:", error);
     } finally {
       setDeletingFolderId(null);
     }
-  }, []);
+  }, [refreshWorkspace]);
 
   const handleDeleteFolder = useCallback((folderId: string, label: string) => {
     setConfirmDeleteState({
@@ -1169,23 +1227,6 @@ export default function DashboardClient() {
     );
   }, []);
 
-  const fetchFolders = useCallback(async () => {
-    if (!userId) {
-      setFolders([]);
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `/api/folders?memento_user_id=${encodeURIComponent(userId)}`,
-      );
-      const data = (await response.json()) as { folders: Folder[] };
-      setFolders(data.folders || []);
-    } catch (error) {
-      console.error("Failed to fetch folders:", error);
-    }
-  }, [userId]);
-
   const handleCreateFolder = async (event: FormEvent) => {
     event.preventDefault();
     if (!newFolderName.trim()) return;
@@ -1203,7 +1244,7 @@ export default function DashboardClient() {
       if (response.ok) {
         setNewFolderName("");
         setIsCreatingFolder(false);
-        void fetchFolders();
+        await refreshWorkspace();
       }
     } catch (error) {
       console.error("Failed to create folder:", error);
@@ -1222,7 +1263,7 @@ export default function DashboardClient() {
       });
 
       if (response.ok) {
-        void fetchMemories();
+        await refreshWorkspace();
       }
     } catch (error) {
       console.error("Failed to move memory to folder:", error);
@@ -1324,13 +1365,42 @@ export default function DashboardClient() {
     }, 0);
 
     const timeoutId = window.setTimeout(() => {
-      void fetchBriefing();
-      void fetchMemories();
-      void fetchFolders();
+      void refreshWorkspace();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [fetchBriefing, fetchFolders, fetchMemories, isUserIdReady, userId]);
+  }, [isUserIdReady, refreshWorkspace, userId]);
+
+  useEffect(() => {
+    if (!isUserIdReady || !userId) {
+      return;
+    }
+
+    const handleWindowFocus = () => {
+      void refreshWorkspace();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void refreshWorkspace();
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (!document.hidden) {
+        void refreshWorkspace();
+      }
+    }, WORKSPACE_REFRESH_INTERVAL_MS);
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isUserIdReady, refreshWorkspace, userId]);
 
   useEffect(() => {
     return () => {
